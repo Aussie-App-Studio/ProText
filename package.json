@@ -6,6 +6,7 @@
   "type": "module",
   "scripts": {
     "build": "node build.mjs",
+    "package": "node build.mjs && node tools/package.mjs",
     "dev": "node build.mjs --watch",
     "browser": "node tools/dev-browser.mjs",
     "typecheck": "tsc --noEmit"
