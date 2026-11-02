@@ -774,19 +774,40 @@ export function ScheduleSendFeature() {
     };
   }, [enabled]);
 
-  // 3. Fallback interval check (every 4 seconds) to guarantee dispatch even if alarm was suppressed
+  // 3. Fallback interval check to guarantee dispatch even if alarm was suppressed
   useEffect(() => {
     if (!enabled) return;
-    const timer = setInterval(() => {
+
+    // Filter only active pending messages
+    const activeMessages = scheduled.filter(m => m.status === 'scheduled' || m.status === 'delayed');
+    if (activeMessages.length === 0) {
+      // Zero pending messages: 0 background timers running
+      return;
+    }
+
+    // Exact timer targeting the next due message directly
+    const earliestTime = Math.min(...activeMessages.map(m => m.scheduledFor));
+    const delay = Math.max(500, Math.min(earliestTime - Date.now(), 2147483647));
+
+    const exactTimer = setTimeout(() => {
+      void checkAndDispatch();
+    }, delay);
+
+    // Gentle 180s (3-minute) fallback check as secondary safety net
+    const fallbackTimer = setInterval(() => {
       // If extension context was invalidated (e.g. extension reloaded in dev mode), cease polling
       if (typeof chrome !== 'undefined' && chrome.runtime && !chrome.runtime.id) {
-        clearInterval(timer);
+        clearInterval(fallbackTimer);
         return;
       }
       void checkAndDispatch();
-    }, 4000);
-    return () => clearInterval(timer);
-  }, [enabled]);
+    }, 180_000);
+
+    return () => {
+      clearTimeout(exactTimer);
+      clearInterval(fallbackTimer);
+    };
+  }, [enabled, scheduled]);
 
   if (!enabled) return null;
 
