@@ -66,6 +66,7 @@ export function toTransparentRgba(color: string): string {
 export interface ThemeCssConfig {
   bodyBg: string;
   sidebarBg: string;
+  headerBg?: string;
   sidebarBorder?: string;
   selectedBg: string;
   hoverBg?: string;
@@ -84,9 +85,10 @@ export interface ThemeCssConfig {
 
 export function createThemeCss(cfg: ThemeCssConfig): string {
   const isDark = isDarkColor(cfg.bodyBg);
-  const border = cfg.sidebarBorder || (isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.08)');
+  const border = cfg.sidebarBorder || (isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.08)');
   const hoverBg = cfg.hoverBg || (isDark ? 'rgba(255, 255, 255, 0.04)' : 'rgba(0, 0, 0, 0.04)');
   const snippetColor = cfg.snippetColor || (isDark ? 'rgba(255, 255, 255, 0.6)' : 'rgba(0, 0, 0, 0.6)');
+  const headerBg = cfg.headerBg || (isDark ? '#131314' : '#ffffff');
 
   const transparentBodyBg = toTransparentRgba(cfg.bodyBg);
   const inputBoxBg = cfg.inputBoxBg || (isDark ? cfg.incomingBg : '#ffffff');
@@ -98,15 +100,31 @@ export function createThemeCss(cfg: ThemeCssConfig): string {
   const pickerFill = cfg.pickerFill || (isDark ? (cfg.incomingText || cfg.textColor) : 'rgba(0, 0, 0, 0.6)');
 
   return `
-    body, mw-branded-header, mw-conversation-container, mws-header, mws-conversations-list, [data-e2e-conversation-container] {
+    body, mw-conversation-container, [data-e2e-conversation-container] {
       background-color: ${cfg.bodyBg} !important;
       color: ${cfg.textColor} !important;
     }
+
+    /* Distinct Top Bar: clearly framed header bar */
     mw-branded-header {
+      background-color: ${headerBg} !important;
       border-bottom: 1px solid ${border} !important;
+      color: ${cfg.textColor} !important;
+    }
+
+    /* Conversation Header on the right: matches top bar for cohesive framing */
+    mws-header, mw-conversation-header {
+      background-color: ${headerBg} !important;
+      border-bottom: 1px solid ${border} !important;
+      color: ${cfg.textColor} !important;
+    }
+
+    /* Entire Left Sidebar: UNIFIED across Start Chat, Folders, and Conversations List */
+    mw-main-nav, .main-nav-header, mws-conversations-list {
+      background-color: ${cfg.sidebarBg} !important;
+      color: ${cfg.textColor} !important;
     }
     mw-main-nav {
-      background-color: ${cfg.sidebarBg} !important;
       border-right: 1px solid ${border} !important;
     }
     /* Hamburger menu flyout drawer theming */
@@ -210,7 +228,7 @@ export function createThemeCss(cfg: ThemeCssConfig): string {
       color: ${cfg.textColor} !important;
     }
     mw-new-conversation-container mws-header, mw-new-conversation-container .header {
-      background-color: ${cfg.bodyBg} !important;
+      background-color: ${headerBg} !important;
       color: ${cfg.textColor} !important;
     }
     mw-new-conversation-container .title-text, mw-new-conversation-container h2 {
@@ -222,7 +240,7 @@ export function createThemeCss(cfg: ThemeCssConfig): string {
 
     /* Start chat recipient topbar & subheader */
     mw-new-conversation-sub-header, mw-new-conversation-sub-header .sub-header, .new-conversation-sub-header {
-      background-color: ${cfg.bodyBg} !important;
+      background-color: ${headerBg} !important;
       border-bottom: 1px solid ${border} !important;
       color: ${cfg.textColor} !important;
     }
@@ -317,7 +335,9 @@ export const BUILTIN_THEMES: BuiltinTheme[] = [
     dotColor: '#1e1f20',
     css: createThemeCss({
       bodyBg: '#1e1f20',
-      sidebarBg: '#131314',
+      sidebarBg: '#1e1f20',
+      headerBg: '#131314',
+      sidebarBorder: 'rgba(255, 255, 255, 0.1)',
       selectedBg: '#303134',
       hoverBg: '#282a2d',
       textColor: '#e3e3e3',
