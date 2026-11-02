@@ -8,7 +8,11 @@ import {
   type ScheduledMessage
 } from '../db';
 import { useFeature } from '../settings/store';
-import { dispatchNativeMessage, getIsDispatchingNative } from './UndoSendBuffer';
+import {
+  dispatchNativeMessage,
+  getIsDispatchingNative,
+  navigateToConversation
+} from './UndoSendBuffer';
 import {
   ScheduleSendIcon,
   ScheduleClockIcon,
@@ -17,6 +21,8 @@ import {
   DeleteIcon
 } from '../ui/MaterialIcons';
 import { useThemeMode } from './ThemeEngine';
+
+const STALE_THRESHOLD_MS = 10 * 60 * 1000; // 10 minutes overdue threshold
 
 interface ScheduleModalState {
   open: boolean;
@@ -69,7 +75,7 @@ export async function reloadScheduledMessages() {
   notify();
 }
 
-reloadScheduledMessages();
+void reloadScheduledMessages();
 
 function showScheduleToast(msg: string) {
   toastMessage = msg;
@@ -82,6 +88,49 @@ function showScheduleToast(msg: string) {
   }, 4000);
 }
 
+/** Detects if Google Messages is currently disconnected from the Android phone */
+export function detectPhoneDisconnected(): boolean {
+  const alertEls = document.querySelectorAll(
+    'mw-connection-status, .connection-status, mw-banner, [role="alert"], mws-conversations-list-banner'
+  );
+  for (const el of Array.from(alertEls)) {
+    if ((el as HTMLElement).offsetParent !== null) {
+      const t = (el.textContent || '').toLowerCase();
+      if (
+        t.includes('reach your phone') ||
+        t.includes('phone not connected') ||
+        t.includes('phone is offline') ||
+        t.includes('reconnecting to phone') ||
+        t.includes('waiting for your phone')
+      ) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+/** React hook tracking phone connection status */
+export function usePhoneConnectionStatus(): boolean {
+  const [connected, setConnected] = useState(!detectPhoneDisconnected());
+
+  useEffect(() => {
+    const check = () => {
+      setConnected(!detectPhoneDisconnected());
+    };
+    check();
+    const id = setInterval(check, 2500);
+    const mo = new MutationObserver(check);
+    mo.observe(document.body, { childList: true, subtree: true, attributes: true });
+    return () => {
+      clearInterval(id);
+      mo.disconnect();
+    };
+  }, []);
+
+  return connected;
+}
+
 /** Reads current text in Google Messages composer */
 function readComposerText(): string {
   const ed = Array.from(document.querySelectorAll<HTMLElement>(SEL.editable)).find(e => e.offsetParent !== null);
@@ -91,7 +140,7 @@ function readComposerText(): string {
   return '';
 }
 
-/** Clears Google Messages composer without destroying inner contenteditable nodes */
+/** Clears Google Messages composer cleanly without breaking Angular model */
 function clearComposerText() {
   const ed = Array.from(document.querySelectorAll<HTMLElement>(SEL.editable)).find(e => e.offsetParent !== null);
   const ta = Array.from(document.querySelectorAll<HTMLTextAreaElement>(SEL.textarea)).find(e => e.offsetParent !== null);
@@ -231,6 +280,14 @@ export function formatScheduledTimestamp(ts: number): string {
   return `${dateStr}, ${timeStr}`;
 }
 
+function formatOverdueDuration(ms: number): string {
+  const mins = Math.max(1, Math.round(ms / (60 * 1000)));
+  if (mins < 60) return `${mins}m`;
+  const hours = Math.floor(mins / 60);
+  const remMins = mins % 60;
+  return remMins > 0 ? `${hours}h ${remMins}m` : `${hours}h`;
+}
+
 /** Button mounted inside the Composer Secondary Pill */
 export function ScheduleSendComposerButton() {
   const enabled = useFeature('scheduleSend');
@@ -260,6 +317,7 @@ export function ScheduleSendComposerButton() {
 /** Inline Scheduled Messages tray rendered right above the composer in the active chat */
 function InlineScheduledQueue() {
   const { scheduled } = useScheduleSendStore();
+  const isPhoneConnected = usePhoneConnectionStatus();
   const [convId, setConvId] = useState(getActiveConversationId());
   const [expanded, setExpanded] = useState(true);
   const [activeActionId, setActiveActionId] = useState<string | null>(null);
@@ -334,6 +392,7 @@ function InlineScheduledQueue() {
           <div className="mt-2.5 space-y-2">
             {chatScheduled.map(msg => {
               const menuOpen = activeActionId === msg.id;
+              const isDelayed = msg.status === 'delayed';
 
               return (
                 <div
@@ -346,7 +405,11 @@ function InlineScheduledQueue() {
                     <div
                       onClick={() => setActiveActionId(menuOpen ? null : msg.id)}
                       title="Click to Update, Send now, or Delete"
-                      className="cursor-pointer rounded-2xl rounded-br-sm border border-[#a8c7fa]/30 bg-[#0842a0]/45 hover:bg-[#0842a0]/60 px-3.5 py-2 text-xs text-[#e8eaed] shadow-xs transition-all"
+                      className={`cursor-pointer rounded-2xl rounded-br-sm border px-3.5 py-2 text-xs shadow-xs transition-all ${
+                        isDelayed
+                          ? 'border-amber-400/40 bg-amber-950/30 hover:bg-amber-950/50 text-amber-100'
+                          : 'border-[#a8c7fa]/30 bg-[#0842a0]/45 hover:bg-[#0842a0]/60 text-[#e8eaed]'
+                      }`}
                     >
                       <p className="whitespace-pre-wrap break-words leading-relaxed">
                         {msg.text}
@@ -359,16 +422,27 @@ function InlineScheduledQueue() {
                       data-testid="scheduled-message-clock-btn"
                       onClick={() => setActiveActionId(menuOpen ? null : msg.id)}
                       title="Scheduled message options"
-                      className="cursor-pointer flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#a8c7fa]/15 border border-[#a8c7fa]/30 text-[#a8c7fa] hover:bg-[#a8c7fa]/25 hover:text-white transition-colors"
+                      className={`cursor-pointer flex h-7 w-7 shrink-0 items-center justify-center rounded-full border transition-colors ${
+                        isDelayed
+                          ? 'bg-amber-400/15 border-amber-400/40 text-amber-300 hover:bg-amber-400/25'
+                          : 'bg-[#a8c7fa]/15 border-[#a8c7fa]/30 text-[#a8c7fa] hover:bg-[#a8c7fa]/25 hover:text-white'
+                      }`}
                     >
                       <ScheduleClockIcon size={15} />
                     </button>
                   </div>
 
-                  {/* Scheduled Timestamp Label */}
-                  <span className="text-[10px] text-[#9aa0a6] mt-0.5 mr-9">
-                    Scheduled for {formatScheduledTimestamp(msg.scheduledFor)}
-                  </span>
+                  {/* Scheduled Timestamp Label & Delay Status */}
+                  <div className="flex items-center gap-1.5 mt-0.5 mr-9">
+                    {isDelayed && (
+                      <span className="rounded-full bg-amber-500/20 border border-amber-500/40 px-2 py-0.2 text-[9px] font-semibold text-amber-200">
+                        ⏳ Delayed ({msg.delayReason === 'phone_offline' ? 'Phone was offline' : 'Overdue'})
+                      </span>
+                    )}
+                    <span className="text-[10px] text-[#9aa0a6]">
+                      Scheduled for {formatScheduledTimestamp(msg.scheduledFor)}
+                    </span>
+                  </div>
 
                   {/* Android 3-Option Action Menu */}
                   {menuOpen && (
@@ -411,10 +485,21 @@ function InlineScheduledQueue() {
               );
             })}
 
-            {/* Connection requirement helper note */}
-            <div className="mt-2 pt-1.5 border-t border-[#dadce0]/10 flex items-center justify-between text-[10px] text-[#9aa0a6]">
-              <span>Keep Chrome open & phone connected so scheduled texts can send on time</span>
-              <span>Local timer</span>
+            {/* Connection health & Browser Alarms status indicator */}
+            <div className="mt-2 pt-1.5 border-t border-[#dadce0]/10 flex items-center justify-between text-[10px]">
+              <span className="flex items-center gap-1.5">
+                <span
+                  className={`inline-block h-2 w-2 rounded-full ${
+                    isPhoneConnected ? 'bg-emerald-400' : 'bg-amber-400 animate-pulse'
+                  }`}
+                />
+                <span className={isPhoneConnected ? 'text-[#9aa0a6]' : 'text-amber-300 font-medium'}>
+                  {isPhoneConnected
+                    ? 'Phone connected • Background alarms active'
+                    : 'Phone disconnected • Scheduled texts will hold until reconnected'}
+                </span>
+              </span>
+              <span className="text-[#9aa0a6]">chrome.alarms</span>
             </div>
           </div>
         )}
@@ -426,15 +511,18 @@ function InlineScheduledQueue() {
 export function ScheduleSendFeature() {
   const enabled = useFeature('scheduleSend');
   const { modal, scheduled, toast } = useScheduleSendStore();
+  const isPhoneConnected = usePhoneConnectionStatus();
 
   const [messageText, setMessageText] = useState('');
   const [customMode, setCustomMode] = useState(false);
   const [customDate, setCustomDate] = useState('');
   const [customTime, setCustomTime] = useState('');
   const [dueAlert, setDueAlert] = useState<ScheduledMessage | null>(null);
+  const [staleReview, setStaleReview] = useState<ScheduledMessage | null>(null);
 
   const longPressTimerRef = useRef<any>(null);
   const longPressTriggeredRef = useRef(false);
+  const isDispatchingRef = useRef(false);
 
   // Sync modal state when opened
   useEffect(() => {
@@ -519,23 +607,50 @@ export function ScheduleSendFeature() {
     };
   }, [enabled]);
 
-  // Background check for due scheduled messages
-  useEffect(() => {
-    if (!enabled) return;
+  // Main Dispatch Processor: handles due time, disconnection safety, stale review, and silent navigation
+  const processDueMessage = async (due: ScheduledMessage) => {
+    if (isDispatchingRef.current) return;
+    const now = Date.now();
+    const delayMs = now - due.scheduledFor;
 
-    const timer = setInterval(async () => {
-      const now = Date.now();
-      const all = await getScheduledMessages();
-      cachedScheduled = all;
-      const due = all.find(m => m.status === 'scheduled' && m.scheduledFor <= now);
-      if (!due) return;
-
-      const activeConvId = getActiveConversationId();
-      if (activeConvId && activeConvId === due.conversationId) {
-        due.status = 'sending' as any;
+    // 1. Stale Message Protection: If overdue by > 10 mins (e.g. overnight disconnect or sleeping PC)
+    // DO NOT auto-fire blindly. Present review dialog instead.
+    if (delayMs > STALE_THRESHOLD_MS && due.status !== 'sending') {
+      if (due.status !== 'delayed') {
+        due.status = 'delayed';
+        due.delayReason = 'phone_offline';
         await saveScheduledMessage(due);
+        await reloadScheduledMessages();
+      }
+      setStaleReview(due);
+      return;
+    }
 
-        dispatchNativeMessage(due.text, async (success) => {
+    // 2. Disconnection Guard: If phone is currently disconnected, pause and wait for reconnect
+    if (detectPhoneDisconnected()) {
+      if (due.status !== 'delayed') {
+        due.status = 'delayed';
+        due.delayReason = 'phone_offline';
+        await saveScheduledMessage(due);
+        await reloadScheduledMessages();
+        showScheduleToast('Phone is offline — scheduled message paused until reconnected');
+      }
+      return;
+    }
+
+    // 3. Phone is connected and message is within grace window (<= 10 mins) -> Dispatch!
+    isDispatchingRef.current = true;
+    due.status = 'sending';
+    await saveScheduledMessage(due);
+
+    const activeConvId = getActiveConversationId();
+
+    if (activeConvId && activeConvId === due.conversationId) {
+      // User is already in the recipient's conversation
+      dispatchNativeMessage(
+        due.text,
+        async success => {
+          isDispatchingRef.current = false;
           if (success) {
             await deleteScheduledMessage(due.id);
             await reloadScheduledMessages();
@@ -543,13 +658,124 @@ export function ScheduleSendFeature() {
           } else {
             due.status = 'scheduled';
             await saveScheduledMessage(due);
+            await reloadScheduledMessages();
           }
-        }, due.conversationId);
-      } else {
-        setDueAlert(due);
-      }
-    }, 3000);
+        },
+        due.conversationId
+      );
+    } else {
+      // User is in a different chat (or main view).
+      // Check if user is currently typing a draft in the active composer.
+      const currentDraft = readComposerText();
 
+      if (currentDraft.length > 0) {
+        // User is actively composing in another conversation: show alert banner instead of disrupting
+        isDispatchingRef.current = false;
+        due.status = 'scheduled';
+        await saveScheduledMessage(due);
+        setDueAlert(due);
+      } else {
+        // User is not typing: perform smooth headless navigation, send, and return
+        const returnConvId = activeConvId;
+        const navigated = await navigateToConversation(due.conversationId, due.contactName);
+
+        if (navigated) {
+          dispatchNativeMessage(
+            due.text,
+            async success => {
+              if (success) {
+                await deleteScheduledMessage(due.id);
+                await reloadScheduledMessages();
+                showScheduleToast(`Scheduled message sent to ${due.contactName}`);
+                // Smoothly return user back to where they were
+                if (returnConvId && returnConvId !== due.conversationId) {
+                  await navigateToConversation(returnConvId);
+                }
+              } else {
+                due.status = 'scheduled';
+                await saveScheduledMessage(due);
+                await reloadScheduledMessages();
+              }
+              isDispatchingRef.current = false;
+            },
+            due.conversationId
+          );
+        } else {
+          // Navigation could not find conversation link: fallback to prompt
+          isDispatchingRef.current = false;
+          due.status = 'scheduled';
+          await saveScheduledMessage(due);
+          setDueAlert(due);
+        }
+      }
+    }
+  };
+
+  // Check and dispatch routine
+  const checkAndDispatch = async (specificMessageId?: string) => {
+    if (isDispatchingRef.current) return;
+    const now = Date.now();
+    const all = await getScheduledMessages();
+    cachedScheduled = all;
+
+    const due = specificMessageId
+      ? all.find(m => m.id === specificMessageId && m.scheduledFor <= now)
+      : all.find(m => (m.status === 'scheduled' || m.status === 'delayed') && m.scheduledFor <= now);
+
+    if (due) {
+      await processDueMessage(due);
+    }
+  };
+
+  // 1. Listen for dispatch triggers from background alarms (chrome.alarms)
+  useEffect(() => {
+    if (!enabled) return;
+
+    const onRuntimeMessage = (message: any, _sender: any, sendResponse: any) => {
+      if (message?.type === 'PROTEXT_DISPATCH_SCHEDULED') {
+        void checkAndDispatch(message.messageId);
+        sendResponse?.({ received: true });
+      }
+    };
+
+    if (typeof chrome !== 'undefined' && chrome.runtime?.onMessage) {
+      chrome.runtime.onMessage.addListener(onRuntimeMessage);
+    }
+
+    return () => {
+      if (typeof chrome !== 'undefined' && chrome.runtime?.onMessage) {
+        chrome.runtime.onMessage.removeListener(onRuntimeMessage);
+      }
+    };
+  }, [enabled]);
+
+  // 2. React to chrome.storage changes automatically
+  useEffect(() => {
+    if (!enabled) return;
+
+    const onStorageChanged = (changes: any, areaName: string) => {
+      if (areaName === 'local' && changes['scheduled_messages']) {
+        void reloadScheduledMessages();
+      }
+    };
+
+    if (typeof chrome !== 'undefined' && chrome.storage?.onChanged) {
+      chrome.storage.onChanged.addListener(onStorageChanged);
+    }
+
+    return () => {
+      if (typeof chrome !== 'undefined' && chrome.storage?.onChanged) {
+        chrome.storage.onChanged.removeListener(onStorageChanged);
+      }
+    };
+  }, [enabled]);
+
+  // 3. Fallback interval check (every 4 seconds) to guarantee dispatch even if alarm was suppressed
+  useEffect(() => {
+    if (!enabled) return;
+    const timer = setInterval(() => {
+      void checkAndDispatch();
+    }, 4000);
     return () => clearInterval(timer);
   }, [enabled]);
 
@@ -618,7 +844,84 @@ export function ScheduleSendFeature() {
         </div>
       )}
 
-      {/* Due Scheduled Message Alert (when in a different conversation) */}
+      {/* Stale / Delayed Message Review Modal (Grace Protection) */}
+      {staleReview && (
+        <div
+          data-testid="schedule-stale-review-modal"
+          className="fixed inset-0 z-[2147483646] flex items-center justify-center bg-black/65 backdrop-blur-xs font-sans text-xs"
+          onClick={() => setStaleReview(null)}
+        >
+          <div
+            className="w-[430px] max-w-[94vw] rounded-3xl border border-amber-500/40 bg-[#1e2025] p-6 text-gray-100 shadow-2xl animate-in fade-in zoom-in-95 duration-150"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="flex items-center gap-3 mb-3">
+              <span className="text-2xl">⚠️</span>
+              <div>
+                <h3 className="text-sm font-semibold text-white">
+                  Delayed Scheduled Message
+                </h3>
+                <p className="text-[11px] text-amber-300">
+                  Scheduled for {formatScheduledTimestamp(staleReview.scheduledFor)} ({formatOverdueDuration(Date.now() - staleReview.scheduledFor)} ago)
+                </p>
+              </div>
+            </div>
+
+            <p className="text-xs text-gray-300 mb-3 leading-relaxed">
+              This scheduled text to <strong className="text-white">{staleReview.contactName}</strong> was delayed while your phone was disconnected or your computer was asleep.
+            </p>
+
+            <div className="rounded-2xl border border-gray-700 bg-gray-900/90 p-3.5 mb-4 text-xs text-gray-100 whitespace-pre-wrap break-words leading-relaxed font-mono">
+              "{staleReview.text}"
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-gray-800">
+              <button
+                type="button"
+                onClick={async () => {
+                  const item = staleReview;
+                  setStaleReview(null);
+                  await deleteScheduledMessage(item.id);
+                  await reloadScheduledMessages();
+                  showScheduleToast('Delayed message discarded');
+                }}
+                className="cursor-pointer rounded-xl px-3.5 py-2 text-xs text-red-400 hover:bg-red-500/10 hover:text-red-300 transition-colors font-medium"
+              >
+                Discard
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  const item = staleReview;
+                  setStaleReview(null);
+                  openScheduleModal(item);
+                }}
+                className="cursor-pointer rounded-xl px-3.5 py-2 text-xs text-gray-300 hover:bg-white/10 hover:text-white transition-colors font-medium"
+              >
+                Edit & Reschedule
+              </button>
+
+              <button
+                type="button"
+                onClick={async () => {
+                  const item = staleReview;
+                  setStaleReview(null);
+                  await deleteScheduledMessage(item.id);
+                  await reloadScheduledMessages();
+                  dispatchNativeMessage(item.text, undefined, item.conversationId);
+                  showScheduleToast(`Sent scheduled message to ${item.contactName}`);
+                }}
+                className="cursor-pointer rounded-xl bg-blue-600 hover:bg-blue-500 px-4 py-2 text-xs font-semibold text-white shadow transition-colors"
+              >
+                Send Now
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Due Scheduled Message Alert (when user was actively composing in another conversation) */}
       {dueAlert && (
         <div className="fixed top-16 left-1/2 -translate-x-1/2 z-[2147483647] flex items-center gap-3 rounded-2xl border border-blue-500/50 bg-[#1b1c20] px-4 py-3 text-xs text-white shadow-2xl font-sans">
           <span className="text-lg">🕒</span>
@@ -666,7 +969,7 @@ export function ScheduleSendFeature() {
           onKeyDown={e => e.stopPropagation()}
         >
           <div
-            className="w-[380px] max-w-[94vw] rounded-3xl border border-gray-700/80 bg-[#1e2025] text-gray-100 shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150"
+            className="w-[390px] max-w-[94vw] rounded-3xl border border-gray-700/80 bg-[#1e2025] text-gray-100 shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150"
             onClick={e => e.stopPropagation()}
           >
             {/* Dialog Header */}
@@ -684,9 +987,19 @@ export function ScheduleSendFeature() {
                   ✕
                 </button>
               </div>
-              <p className="text-[11px] text-gray-400 mt-0.5">
-                {getTimezoneLabel()}
-              </p>
+              <div className="flex items-center justify-between text-[11px] text-gray-400 mt-1">
+                <span>{getTimezoneLabel()}</span>
+                <span className="flex items-center gap-1.5 text-[10px]">
+                  <span
+                    className={`inline-block h-1.5 w-1.5 rounded-full ${
+                      isPhoneConnected ? 'bg-emerald-400' : 'bg-amber-400'
+                    }`}
+                  />
+                  <span className={isPhoneConnected ? 'text-emerald-300' : 'text-amber-300 font-medium'}>
+                    {isPhoneConnected ? 'Phone connected' : 'Phone offline'}
+                  </span>
+                </span>
+              </div>
             </div>
 
             {/* Editable Message Input Box */}
@@ -705,13 +1018,13 @@ export function ScheduleSendFeature() {
               />
             </div>
 
-            {/* Browser & Phone Connection Warning */}
-            <div className="mx-6 mb-2 flex items-start gap-2.5 rounded-xl border border-amber-500/35 bg-amber-500/10 px-3 py-2 text-[11px] text-amber-200/90 leading-tight">
-              <span className="text-sm shrink-0">⚠️</span>
+            {/* Browser Alarms & Phone Connection Explainer */}
+            <div className="mx-6 mb-2 flex items-start gap-2.5 rounded-xl border border-blue-500/35 bg-blue-500/10 px-3 py-2 text-[11px] text-blue-200/90 leading-tight">
+              <span className="text-sm shrink-0">⏰</span>
               <div>
-                <span className="font-semibold text-amber-100">Keep Chrome open & computer awake:</span>
-                <span className="text-amber-200/80 ml-1">
-                  Scheduled texts send locally from this browser. If Chrome is closed, the computer goes to sleep, or your phone loses connection, messages will wait and send when reconnected.
+                <span className="font-semibold text-blue-100">Scheduled via Browser Alarms:</span>
+                <span className="text-blue-200/80 ml-1">
+                  Scheduled texts are backed by chrome.alarms. If your phone disconnects or PC sleeps, messages pause safely. Messages delayed &gt;10 mins will ask for your confirmation before sending.
                 </span>
               </div>
             </div>

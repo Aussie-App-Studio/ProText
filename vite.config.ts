@@ -13,7 +13,11 @@ export default defineConfig({
     minify: false,
     sourcemap: 'inline',
     rollupOptions: {
-      input: { content: 'src/content/main.tsx', background: 'src/background/index.ts' },
+      input: {
+        content: 'src/content/main.tsx',
+        background: 'src/background/index.ts',
+        welcome: 'src/welcome/index.tsx'
+      },
       output: { format: 'es', entryFileNames: '[name].js', inlineDynamicImports: false }
     }
   }

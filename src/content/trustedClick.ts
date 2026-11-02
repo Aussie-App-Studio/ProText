@@ -24,6 +24,14 @@ export async function trustedClick(el: HTMLElement): Promise<boolean> {
     el.click();
   } catch {}
 
+  // 2. Dispatch custom Angular events to host components
+  try {
+    const sendBtnHost = document.querySelector('mws-message-send-button, mw-message-send-button');
+    const compose = document.querySelector('mws-message-compose');
+    sendBtnHost?.dispatchEvent(new CustomEvent('sendClicked', { bubbles: true }));
+    compose?.dispatchEvent(new CustomEvent('sendMessage', { bubbles: true }));
+  } catch {}
+
   // Check if sent
   if (!ed || !(ed.textContent || '').trim()) {
     return true;

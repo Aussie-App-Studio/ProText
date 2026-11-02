@@ -13,6 +13,10 @@ export function setDispatchingNative(val: boolean) {
   isDispatchingNative = val;
 }
 
+if (typeof window !== 'undefined') {
+  (window as any).__mpDispatchNative = dispatchNativeMessage;
+}
+
 export function getIsDispatchingNative(): boolean {
   return isDispatchingNative;
 }
@@ -111,6 +115,9 @@ export function dispatchNativeMessage(
   onComplete?: (success: boolean) => void,
   expectedConversationId?: string
 ) {
+  if (typeof window !== 'undefined') {
+    (window as any).__mpDispatchNative = dispatchNativeMessage;
+  }
   const clean = text.trim();
   if (!clean) {
     onComplete?.(false);
@@ -199,6 +206,8 @@ export function dispatchNativeMessage(
       !sendBtn.classList.contains('mat-mdc-button-disabled') &&
       sendBtn.getAttribute('aria-disabled') !== 'true';
 
+    console.log('[dispatchNativeMessage] ' + JSON.stringify({ attempts, isReady, sendBtn: !!sendBtn, disabled: sendBtn?.disabled, hasDisabledClass: sendBtn?.classList.contains('mat-mdc-button-disabled'), ariaDisabled: sendBtn?.getAttribute('aria-disabled') }));
+
     if (isReady && sendBtn) {
       // Final check immediately before dispatch
       if (expectedConversationId && getActiveConversationIdFromUrl() !== expectedConversationId) {
@@ -207,7 +216,15 @@ export function dispatchNativeMessage(
         return;
       }
 
-      // 1. Immediate element click
+      // 1. Dispatch custom Angular events to host components
+      try {
+        const sendBtnHost = document.querySelector('mws-message-send-button, mw-message-send-button');
+        const compose = document.querySelector('mws-message-compose');
+        sendBtnHost?.dispatchEvent(new CustomEvent('sendClicked', { bubbles: true }));
+        compose?.dispatchEvent(new CustomEvent('sendMessage', { bubbles: true }));
+      } catch {}
+
+      // 2. Immediate element click
       try {
         sendBtn.click();
       } catch {}

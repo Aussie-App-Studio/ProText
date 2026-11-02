@@ -49,7 +49,7 @@ function MaterialToggle({
   );
 }
 
-export function FullSettingsPage() {
+export function FullSettingsPage({ embedded = false }: { embedded?: boolean } = {}) {
   const { fullSettingsOpen, flags, mPlusPillVisible } = useStore();
   const { currentTheme, effectiveMode, selectTheme, customThemes, saveCustom, deleteCustom } = useThemeEngine();
   const { emojis, mode } = useQuickEmojis();
@@ -67,7 +67,7 @@ export function FullSettingsPage() {
 
   // Handle Escape key to close
   useEffect(() => {
-    if (!fullSettingsOpen) return;
+    if (embedded || !fullSettingsOpen) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         e.preventDefault();
@@ -77,7 +77,7 @@ export function FullSettingsPage() {
     };
     window.addEventListener('keydown', onKey, true);
     return () => window.removeEventListener('keydown', onKey, true);
-  }, [fullSettingsOpen]);
+  }, [embedded, fullSettingsOpen]);
 
   // Filter features based on search and tab
   const filteredFeatures = useMemo(() => {
@@ -175,16 +175,22 @@ export function FullSettingsPage() {
     }
   };
 
-  if (!fullSettingsOpen) return null;
+  if (!embedded && !fullSettingsOpen) return null;
 
   return (
     <div
-      role="dialog"
-      aria-modal="true"
+      role={embedded ? undefined : 'dialog'}
+      aria-modal={embedded ? undefined : 'true'}
       aria-label="ProText Settings"
-      className={`fixed inset-0 z-[2147483646] overflow-y-auto pointer-events-auto font-sans transition-colors duration-200 ${
-        isLight ? 'bg-[#f8f9fa] text-gray-900' : 'bg-[#1e1f22] text-[#e8eaed]'
-      }`}
+      className={
+        embedded
+          ? `w-full rounded-2xl border transition-colors duration-200 overflow-hidden shadow-xs ${
+              isLight ? 'bg-white border-gray-200 text-gray-900' : 'bg-[#1e1f22] border-white/10 text-[#e8eaed]'
+            }`
+          : `fixed inset-0 z-[2147483646] overflow-y-auto pointer-events-auto font-sans transition-colors duration-200 ${
+              isLight ? 'bg-[#f8f9fa] text-gray-900' : 'bg-[#1e1f22] text-[#e8eaed]'
+            }`
+      }
     >
       {/* 1. TOP MATERIAL DESIGN HEADER (Matching Google Messages /web/settings) */}
       <header
@@ -197,30 +203,32 @@ export function FullSettingsPage() {
         <div className="mx-auto flex max-w-4xl items-center justify-between px-4 py-3 sm:px-6">
           {/* Back button & Title */}
           <div className="flex items-center gap-3">
-            <button
-              type="button"
-              data-mp-settings-back-button=""
-              onClick={closeFullSettings}
-              title="Back to messages (Esc)"
-              className={`cursor-pointer rounded-full p-2 transition-colors ${
-                isLight
-                  ? 'hover:bg-gray-100 text-gray-700 active:bg-gray-200'
-                  : 'hover:bg-white/10 text-gray-300 active:bg-white/15'
-              }`}
-            >
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z" />
-              </svg>
-            </button>
+            {!embedded && (
+              <button
+                type="button"
+                data-mp-settings-back-button=""
+                onClick={closeFullSettings}
+                title="Back to messages (Esc)"
+                className={`cursor-pointer rounded-full p-2 transition-colors ${
+                  isLight
+                    ? 'hover:bg-gray-100 text-gray-700 active:bg-gray-200'
+                    : 'hover:bg-white/10 text-gray-300 active:bg-white/15'
+                }`}
+              >
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z" />
+                </svg>
+              </button>
+            )}
 
             <div className="flex items-center gap-2.5">
               <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-blue-600 font-bold text-[11px] tracking-wider text-white shadow-xs">
                 PRO
               </span>
               <div>
-                <h1 className="text-lg font-semibold tracking-tight leading-none sm:text-xl">
-                  ProText Settings
-                </h1>
+                <h2 className="text-base font-semibold tracking-tight leading-none sm:text-xl">
+                  {embedded ? 'Feature Settings & Preferences' : 'ProText Settings'}
+                </h2>
                 <span className={`text-[11px] font-medium leading-none ${isLight ? 'text-gray-500' : 'text-gray-400'}`}>
                   Themes, folders, undo send & power tools for Google Messages™
                 </span>
@@ -271,13 +279,15 @@ export function FullSettingsPage() {
               <span className="text-[10px] opacity-70">↗</span>
             </a>
 
-            <button
-              type="button"
-              onClick={closeFullSettings}
-              className="cursor-pointer rounded-full bg-blue-600 px-4 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-blue-500 transition-colors"
-            >
-              Done
-            </button>
+            {!embedded && (
+              <button
+                type="button"
+                onClick={closeFullSettings}
+                className="cursor-pointer rounded-full bg-blue-600 px-4 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-blue-500 transition-colors"
+              >
+                Done
+              </button>
+            )}
           </div>
         </div>
 

@@ -1167,6 +1167,33 @@ if (typeof window !== 'undefined') {
   }
 }
 
+// React live to theme changes made across tabs (e.g. from the Welcome page)
+if (typeof chrome !== 'undefined' && chrome.storage?.onChanged) {
+  chrome.storage.onChanged.addListener((changes, areaName) => {
+    if (areaName === 'local') {
+      let updated = false;
+      if (changes[`setting_${THEME_KEY}`]) {
+        const next = changes[`setting_${THEME_KEY}`].newValue;
+        if (typeof next === 'string' && next !== currentThemeId) {
+          currentThemeId = next;
+          updated = true;
+        }
+      }
+      if (changes[`setting_${CUSTOM_THEMES_KEY}`]) {
+        const nextList = changes[`setting_${CUSTOM_THEMES_KEY}`].newValue;
+        if (Array.isArray(nextList)) {
+          customThemesList = nextList;
+          updated = true;
+        }
+      }
+      if (updated) {
+        applyThemeById(currentThemeId, customThemesList);
+        notify();
+      }
+    }
+  });
+}
+
 const subscribeTheme = (cb: () => void) => {
   listeners.add(cb);
   return () => listeners.delete(cb);

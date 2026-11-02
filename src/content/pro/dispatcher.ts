@@ -9,7 +9,7 @@ import {
 } from '../db';
 import { SEL } from '../selectors';
 import { renderTemplate, type ContactRecipient } from './parser';
-import { setDispatchingNative } from '../features/UndoSendBuffer';
+import { setDispatchingNative, dispatchNativeMessage } from '../features/UndoSendBuffer';
 import { trustedClick } from '../trustedClick';
 
 export type DispatcherState = 'idle' | 'running' | 'paused' | 'cancelled';
@@ -114,16 +114,54 @@ class Dispatcher {
       box.textContent = text;
       box.dispatchEvent(new Event('input', { bubbles: true }));
     }
+    box.dispatchEvent(new Event('input', { bubbles: true }));
     box.dispatchEvent(new Event('change', { bubbles: true }));
+    await sleep(250);
   }
 
-  /** Initiates a new chat with the target phone number */
-  private async openChatWithPhone(phone: string): Promise<void> {
-    // 1. Click Start Chat button
+  /** Initiates a chat with the target contact or phone number */
+  private async openChatWithPhone(phone: string, name?: string): Promise<void> {
+    const cleanDigits = phone.replace(/\D/g, '');
+    const lastDigits = cleanDigits.length >= 8 ? cleanDigits.slice(-8) : cleanDigits;
+
+    // 0. Check if conversation is already open right now
+    const currentHeader = document.querySelector(SEL.headerTitle)?.textContent?.trim() || '';
+    if (
+      (name && currentHeader.toLowerCase().includes(name.toLowerCase())) ||
+      (lastDigits && currentHeader.replace(/\D/g, '').includes(lastDigits))
+    ) {
+      const composer = document.querySelector(SEL.editable);
+      if (composer && (composer as HTMLElement).offsetParent !== null) {
+        return; // Already in target conversation!
+      }
+    }
+
+    // 1. Check if conversation is already in sidebar list
+    const items = Array.from(document.querySelectorAll<HTMLElement>('mws-conversation-list-item'));
+    const matchedItem = items.find(item => {
+      const text = item.textContent || '';
+      if (name && text.toLowerCase().includes(name.toLowerCase())) return true;
+      if (lastDigits && text.replace(/\D/g, '').includes(lastDigits)) return true;
+      return false;
+    });
+
+    if (matchedItem) {
+      const link = matchedItem.querySelector<HTMLAnchorElement>('a') || matchedItem;
+      link.click();
+      await sleep(600);
+      const composer = await this.waitForElement<HTMLElement>([
+        SEL.editable,
+        'mws-message-compose [contenteditable="true"]'
+      ], 5000);
+      if (composer) return;
+    }
+
+    // 2. Otherwise use Google's Start Chat flow
     const startBtn = await this.waitForElement<HTMLAnchorElement>([
       SEL.startChatButton,
       'a[data-e2e-start-button]',
-      'a[href*="/web/conversations/new"]'
+      'a[href*="/web/conversations/new"]',
+      'mw-fab-link a'
     ], 5000);
 
     if (!startBtn) {
@@ -132,8 +170,9 @@ class Dispatcher {
     startBtn.click();
     await sleep(400);
 
-    // 2. Wait for recipient input
+    // 3. Wait for recipient input
     const input = await this.waitForElement<HTMLInputElement>([
+      'input.contact-chip-input',
       'input[data-e2e-contact-input]',
       'mws-contact-chips-input input',
       'input[data-e2e-contact-search-input]',
@@ -161,7 +200,7 @@ class Dispatcher {
     input.dispatchEvent(new Event('change', { bubbles: true }));
     await sleep(800);
 
-    // 3. Select recipient option or press Enter
+    // 4. Select recipient option or press Enter
     const option = await this.waitForElement<HTMLElement>([
       'button[data-e2e-send-to-button]',
       'mw-contact-selector-button button',
@@ -169,7 +208,7 @@ class Dispatcher {
       'mw-contact-row button',
       'mws-contact-selector-button button',
       'mws-contact-list-item button'
-    ], 3000);
+    ], 5000);
     if (option) {
       option.click();
     } else {
@@ -179,7 +218,7 @@ class Dispatcher {
 
     await sleep(800);
 
-    // 4. Verify composer appears
+    // 5. Verify composer appears
     const composer = await this.waitForElement<HTMLElement>([
       SEL.editable,
       'mws-message-compose [contenteditable="true"]'
@@ -192,12 +231,18 @@ class Dispatcher {
 
   /** Clicks the native Send button */
   private async triggerSend(): Promise<void> {
-    await sleep(400);
-    const sendBtn = await this.waitForElement<HTMLButtonElement>([
-      SEL.sendButton,
-      'button[data-e2e-send-text-button]',
-      'button[aria-label*="send" i]'
-    ], 5000);
+    await sleep(300);
+    let sendBtn: HTMLButtonElement | null = null;
+    const end = Date.now() + 4000;
+    while (Date.now() < end) {
+      sendBtn = document.querySelector<HTMLButtonElement>(
+        'button[data-e2e-send-text-button], mws-message-compose button.send-button, button[aria-label*="send" i]'
+      );
+      if (sendBtn && !sendBtn.disabled && sendBtn.getAttribute('aria-disabled') !== 'true') {
+        break;
+      }
+      await sleep(200);
+    }
 
     if (!sendBtn) {
       throw new Error('Send button not found.');
@@ -272,12 +317,16 @@ class Dispatcher {
       };
 
       try {
-        await this.openChatWithPhone(recipient.phone);
+        await this.openChatWithPhone(recipient.phone, recipient.name);
 
         if (this.isCancelled()) break;
 
-        await this.setComposerText(personalizedText);
-        await this.triggerSend();
+        await new Promise<void>((resolve, reject) => {
+          dispatchNativeMessage(personalizedText, (success) => {
+            if (success) resolve();
+            else reject(new Error('Failed to dispatch message to ' + recipient.phone));
+          });
+        });
 
         logItem.status = 'sent';
         this.campaign.sent += 1;

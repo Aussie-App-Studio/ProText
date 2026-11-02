@@ -7,7 +7,8 @@ import tailwind from '@tailwindcss/vite';
 const watch = process.argv.includes('--watch');
 const entries = [
   { name: 'content', file: 'src/content/main.tsx', first: true },
-  { name: 'background', file: 'src/background/index.ts' }
+  { name: 'background', file: 'src/background/index.ts' },
+  { name: 'welcome', file: 'src/welcome/index.tsx' }
 ];
 
 for (const e of entries) {

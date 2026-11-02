@@ -131,7 +131,9 @@ export interface ScheduledMessage {
   text: string;
   scheduledFor: number;
   createdAt: number;
-  status: 'scheduled' | 'sent' | 'cancelled';
+  status: 'scheduled' | 'sending' | 'delayed' | 'sent' | 'cancelled';
+  lastAttemptAt?: number;
+  delayReason?: 'phone_offline' | 'computer_asleep' | 'user_interrupted';
 }
 
 export function toPhoneKey(raw: string): string {
@@ -301,14 +303,41 @@ export function getDB() {
   }));
 }
 
-// Settings
+// Settings (stored in chrome.storage.local for cross-origin sync with welcome page, with IndexedDB fallback/mirror)
 export async function getSetting<T>(key: string, fallback: T): Promise<T> {
-  const v = await (await getDB()).get('settings', key);
-  return (v === undefined ? fallback : v) as T;
+  const storageKey = `setting_${key}`;
+  if (typeof chrome !== 'undefined' && chrome.storage?.local) {
+    try {
+      const res = await chrome.storage.local.get(storageKey);
+      if (res && res[storageKey] !== undefined) {
+        return res[storageKey] as T;
+      }
+    } catch {}
+  }
+  try {
+    const v = await (await getDB()).get('settings', key);
+    if (v !== undefined) {
+      if (typeof chrome !== 'undefined' && chrome.storage?.local) {
+        try {
+          void chrome.storage.local.set({ [storageKey]: v });
+        } catch {}
+      }
+      return v as T;
+    }
+  } catch {}
+  return fallback;
 }
 
 export async function setSetting(key: string, value: unknown) {
-  await (await getDB()).put('settings', value, key);
+  const storageKey = `setting_${key}`;
+  if (typeof chrome !== 'undefined' && chrome.storage?.local) {
+    try {
+      await chrome.storage.local.set({ [storageKey]: value });
+    } catch {}
+  }
+  try {
+    await (await getDB()).put('settings', value, key);
+  } catch {}
 }
 
 // Thread history caching (for Quick Peek)
@@ -611,24 +640,105 @@ export async function deleteStoredContact(rawPhone: string) {
   await db.delete('contacts', key);
 }
 
-// Scheduled Messages CRUD
+// Scheduled Messages Storage (chrome.storage.local primary with IndexedDB mirror & alarm synchronization)
+export const SCHEDULED_STORAGE_KEY = 'scheduled_messages';
+
 export async function getScheduledMessages(): Promise<ScheduledMessage[]> {
-  const db = await getDB();
-  const list = await db.getAll('scheduledMessages');
-  return list
-    .filter(m => m.status === 'scheduled')
-    .sort((a, b) => a.scheduledFor - b.scheduledFor);
+  // 1. Try reading from chrome.storage.local (shared with background service worker alarms)
+  try {
+    if (typeof chrome !== 'undefined' && chrome.storage?.local) {
+      const data = await chrome.storage.local.get(SCHEDULED_STORAGE_KEY);
+      const list = data[SCHEDULED_STORAGE_KEY] as ScheduledMessage[] | undefined;
+      if (Array.isArray(list)) {
+        return list
+          .filter(m => m.status === 'scheduled' || m.status === 'delayed' || m.status === 'sending')
+          .sort((a, b) => a.scheduledFor - b.scheduledFor);
+      }
+    }
+  } catch (err) {
+    console.warn('[ProText] chrome.storage.local read failed, falling back to IndexedDB:', err);
+  }
+
+  // 2. Fallback to IndexedDB (and migrate any existing scheduled messages over to chrome.storage.local)
+  try {
+    const db = await getDB();
+    const list = await db.getAll('scheduledMessages');
+    const valid = list
+      .filter(m => m.status === 'scheduled' || m.status === 'delayed' || m.status === 'sending')
+      .sort((a, b) => a.scheduledFor - b.scheduledFor);
+
+    if (valid.length > 0 && typeof chrome !== 'undefined' && chrome.storage?.local) {
+      void chrome.storage.local.set({ [SCHEDULED_STORAGE_KEY]: valid });
+      try {
+        chrome.runtime.sendMessage({ type: 'SCHEDULE_SYNC_ALARMS' });
+      } catch {}
+    }
+    return valid;
+  } catch (err) {
+    console.warn('[ProText] IndexedDB read failed:', err);
+    return [];
+  }
 }
 
 export async function saveScheduledMessage(msg: ScheduledMessage): Promise<ScheduledMessage> {
-  const db = await getDB();
-  await db.put('scheduledMessages', msg);
+  // 1. Persist to chrome.storage.local
+  if (typeof chrome !== 'undefined' && chrome.storage?.local) {
+    try {
+      const data = await chrome.storage.local.get(SCHEDULED_STORAGE_KEY);
+      const list: ScheduledMessage[] = Array.isArray(data[SCHEDULED_STORAGE_KEY]) ? data[SCHEDULED_STORAGE_KEY] : [];
+      const idx = list.findIndex(m => m.id === msg.id);
+      if (idx >= 0) {
+        list[idx] = msg;
+      } else {
+        list.push(msg);
+      }
+      await chrome.storage.local.set({ [SCHEDULED_STORAGE_KEY]: list });
+
+      // Signal background service worker to update chrome.alarms immediately
+      try {
+        chrome.runtime.sendMessage({ type: 'SCHEDULE_SYNC_ALARMS' });
+      } catch {}
+    } catch (e) {
+      console.warn('[ProText] chrome.storage.local write failed:', e);
+    }
+  }
+
+  // 2. Mirror into IndexedDB for persistence & offline backup
+  try {
+    const db = await getDB();
+    await db.put('scheduledMessages', msg);
+  } catch (e) {
+    console.warn('[ProText] IndexedDB mirror write failed:', e);
+  }
+
   return msg;
 }
 
 export async function deleteScheduledMessage(id: string): Promise<void> {
-  const db = await getDB();
-  await db.delete('scheduledMessages', id);
+  // 1. Remove from chrome.storage.local
+  if (typeof chrome !== 'undefined' && chrome.storage?.local) {
+    try {
+      const data = await chrome.storage.local.get(SCHEDULED_STORAGE_KEY);
+      const list: ScheduledMessage[] = Array.isArray(data[SCHEDULED_STORAGE_KEY]) ? data[SCHEDULED_STORAGE_KEY] : [];
+      const filtered = list.filter(m => m.id !== id);
+      await chrome.storage.local.set({ [SCHEDULED_STORAGE_KEY]: filtered });
+
+      // Signal background service worker to remove the alarm
+      try {
+        chrome.runtime.sendMessage({ type: 'SCHEDULE_SYNC_ALARMS' });
+      } catch {}
+    } catch (e) {
+      console.warn('[ProText] chrome.storage.local delete failed:', e);
+    }
+  }
+
+  // 2. Remove from IndexedDB
+  try {
+    const db = await getDB();
+    await db.delete('scheduledMessages', id);
+  } catch (e) {
+    console.warn('[ProText] IndexedDB delete failed:', e);
+  }
 }
 
 export async function importStoredContacts(

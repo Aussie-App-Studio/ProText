@@ -281,6 +281,26 @@ Promise.all([
   });
 });
 
+// React live to settings changes made across tabs (e.g. from the Welcome page)
+if (typeof chrome !== 'undefined' && chrome.storage?.onChanged) {
+  chrome.storage.onChanged.addListener((changes, areaName) => {
+    if (areaName === 'local') {
+      if (changes[`setting_${KEY}`]) {
+        const next = changes[`setting_${KEY}`].newValue;
+        if (next && typeof next === 'object') {
+          set({ flags: next });
+        }
+      }
+      if (changes[`setting_${KEY_PILL_VISIBLE}`]) {
+        set({ mPlusPillVisible: changes[`setting_${KEY_PILL_VISIBLE}`].newValue !== false });
+      }
+      if (changes[`setting_${KEY_INTRO}`]) {
+        set({ hasSeenSettingsIntro: Boolean(changes[`setting_${KEY_INTRO}`].newValue) });
+      }
+    }
+  });
+}
+
 export const useStore = () => useSyncExternalStore(subscribe, snapshot);
 
 /** Features default to ON until the user switches them off. */

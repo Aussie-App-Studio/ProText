@@ -264,12 +264,6 @@ export function parseCSV(text: string, overrideDelimiter?: string): ParsedAudien
     formatName = 'Tab-Separated / Excel Table';
   }
 
-  // Name columns
-  const firstColIdx = headers.findIndex(h => /^first ?name$|^firstname$|^given ?name$/i.test(h));
-  const lastColIdx = headers.findIndex(h => /^last ?name$|^lastname$|^surname$|^family ?name$/i.test(h));
-  const nicknameColIdx = headers.findIndex(h => /^nickname$|^preferred ?name$/i.test(h));
-  const fullColIdx = headers.findIndex(h => /^full ?name$|^fullname$|^name$|^contact$|^person$/i.test(h));
-
   // Phone columns ranked by priority (Mobile first!)
   const mobileCols = headers
     .map((h, i) => ({ h, i }))
@@ -302,6 +296,20 @@ export function parseCSV(text: string, overrideDelimiter?: string): ParsedAudien
         phoneCandidateCols.push(colIdx);
       }
     });
+  }
+
+  // Name columns
+  let firstColIdx = headers.findIndex(h => /^first ?name$|^firstname$|^given ?name$/i.test(h));
+  let lastColIdx = headers.findIndex(h => /^last ?name$|^lastname$|^surname$|^family ?name$/i.test(h));
+  let nicknameColIdx = headers.findIndex(h => /^nickname$|^preferred ?name$/i.test(h));
+  let fullColIdx = headers.findIndex(h => /^full ?name$|^fullname$|^name$|^contact$|^person$/i.test(h));
+
+  // If no name header was matched, pick the first non-phone column as full name
+  if (fullColIdx === -1 && firstColIdx === -1) {
+    const candidateNameCol = headers.findIndex((_, idx) => !phoneCandidateCols.includes(idx));
+    if (candidateNameCol !== -1) {
+      fullColIdx = candidateNameCol;
+    }
   }
 
   const contacts: ContactRecipient[] = [];
