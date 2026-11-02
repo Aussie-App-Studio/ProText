@@ -109,6 +109,29 @@ export function createThemeCss(cfg: ThemeCssConfig): string {
       background-color: ${cfg.sidebarBg} !important;
       border-right: 1px solid ${border} !important;
     }
+    /* Hamburger menu flyout drawer theming */
+    mw-nav-drawer, mw-nav-drawer nav.container, mw-nav-drawer .container {
+      background-color: ${cfg.sidebarBg} !important;
+      color: ${cfg.textColor} !important;
+      border-right: 1px solid ${border} !important;
+    }
+    mw-nav-drawer .logo-link, mw-nav-drawer .logo {
+      color: ${cfg.textColor} !important;
+    }
+    mw-nav-drawer .nav-drawer-label, mw-nav-drawer .nav-item {
+      color: ${cfg.textColor} !important;
+    }
+    mw-nav-drawer mw-nav-drawer-item:not(.mp-nav-drawer-item) mws-icon,
+    mw-nav-drawer mw-nav-drawer-item:not(.mp-nav-drawer-item) mws-icon svg {
+      color: ${snippetColor} !important;
+      fill: ${snippetColor} !important;
+    }
+    mw-nav-drawer hr.section-separator, mw-nav-drawer hr {
+      border-color: ${border} !important;
+    }
+    mw-nav-drawer .nav-item:hover, mw-nav-drawer .nav-item:focus, mw-nav-drawer .nav-item:focus-within {
+      background-color: ${hoverBg} !important;
+    }
     mws-conversation-list-item a.selected {
       background-color: ${cfg.selectedBg} !important;
     }
