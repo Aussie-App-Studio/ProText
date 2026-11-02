@@ -303,10 +303,26 @@ export function getDB() {
   }));
 }
 
+export function isExtensionContextValid(): boolean {
+  try {
+    return typeof chrome !== 'undefined' && Boolean(chrome.runtime?.id);
+  } catch {
+    return false;
+  }
+}
+
+function notifyAlarmSync(): void {
+  if (isExtensionContextValid() && typeof chrome.runtime?.sendMessage === 'function') {
+    try {
+      chrome.runtime.sendMessage({ type: 'SCHEDULE_SYNC_ALARMS' })?.catch?.(() => {});
+    } catch {}
+  }
+}
+
 // Settings (stored in chrome.storage.local for cross-origin sync with welcome page, with IndexedDB fallback/mirror)
 export async function getSetting<T>(key: string, fallback: T): Promise<T> {
   const storageKey = `setting_${key}`;
-  if (typeof chrome !== 'undefined' && chrome.storage?.local) {
+  if (isExtensionContextValid() && chrome.storage?.local) {
     try {
       const res = await chrome.storage.local.get(storageKey);
       if (res && res[storageKey] !== undefined) {
@@ -317,9 +333,9 @@ export async function getSetting<T>(key: string, fallback: T): Promise<T> {
   try {
     const v = await (await getDB()).get('settings', key);
     if (v !== undefined) {
-      if (typeof chrome !== 'undefined' && chrome.storage?.local) {
+      if (isExtensionContextValid() && chrome.storage?.local) {
         try {
-          void chrome.storage.local.set({ [storageKey]: v });
+          void chrome.storage.local.set({ [storageKey]: v })?.catch?.(() => {});
         } catch {}
       }
       return v as T;
@@ -330,7 +346,7 @@ export async function getSetting<T>(key: string, fallback: T): Promise<T> {
 
 export async function setSetting(key: string, value: unknown) {
   const storageKey = `setting_${key}`;
-  if (typeof chrome !== 'undefined' && chrome.storage?.local) {
+  if (isExtensionContextValid() && chrome.storage?.local) {
     try {
       await chrome.storage.local.set({ [storageKey]: value });
     } catch {}
@@ -645,8 +661,8 @@ export const SCHEDULED_STORAGE_KEY = 'scheduled_messages';
 
 export async function getScheduledMessages(): Promise<ScheduledMessage[]> {
   // 1. Try reading from chrome.storage.local (shared with background service worker alarms)
-  try {
-    if (typeof chrome !== 'undefined' && chrome.storage?.local) {
+  if (isExtensionContextValid() && chrome.storage?.local) {
+    try {
       const data = await chrome.storage.local.get(SCHEDULED_STORAGE_KEY);
       const list = data[SCHEDULED_STORAGE_KEY] as ScheduledMessage[] | undefined;
       if (Array.isArray(list)) {
@@ -654,9 +670,11 @@ export async function getScheduledMessages(): Promise<ScheduledMessage[]> {
           .filter(m => m.status === 'scheduled' || m.status === 'delayed' || m.status === 'sending')
           .sort((a, b) => a.scheduledFor - b.scheduledFor);
       }
+    } catch (err: any) {
+      if (!err?.message?.includes('Extension context invalidated')) {
+        console.warn('[ProText] chrome.storage.local read failed, falling back to IndexedDB:', err);
+      }
     }
-  } catch (err) {
-    console.warn('[ProText] chrome.storage.local read failed, falling back to IndexedDB:', err);
   }
 
   // 2. Fallback to IndexedDB (and migrate any existing scheduled messages over to chrome.storage.local)
@@ -667,11 +685,9 @@ export async function getScheduledMessages(): Promise<ScheduledMessage[]> {
       .filter(m => m.status === 'scheduled' || m.status === 'delayed' || m.status === 'sending')
       .sort((a, b) => a.scheduledFor - b.scheduledFor);
 
-    if (valid.length > 0 && typeof chrome !== 'undefined' && chrome.storage?.local) {
-      void chrome.storage.local.set({ [SCHEDULED_STORAGE_KEY]: valid });
-      try {
-        chrome.runtime.sendMessage({ type: 'SCHEDULE_SYNC_ALARMS' });
-      } catch {}
+    if (valid.length > 0 && isExtensionContextValid() && chrome.storage?.local) {
+      void chrome.storage.local.set({ [SCHEDULED_STORAGE_KEY]: valid })?.catch?.(() => {});
+      notifyAlarmSync();
     }
     return valid;
   } catch (err) {
@@ -682,7 +698,7 @@ export async function getScheduledMessages(): Promise<ScheduledMessage[]> {
 
 export async function saveScheduledMessage(msg: ScheduledMessage): Promise<ScheduledMessage> {
   // 1. Persist to chrome.storage.local
-  if (typeof chrome !== 'undefined' && chrome.storage?.local) {
+  if (isExtensionContextValid() && chrome.storage?.local) {
     try {
       const data = await chrome.storage.local.get(SCHEDULED_STORAGE_KEY);
       const list: ScheduledMessage[] = Array.isArray(data[SCHEDULED_STORAGE_KEY]) ? data[SCHEDULED_STORAGE_KEY] : [];
@@ -693,13 +709,11 @@ export async function saveScheduledMessage(msg: ScheduledMessage): Promise<Sched
         list.push(msg);
       }
       await chrome.storage.local.set({ [SCHEDULED_STORAGE_KEY]: list });
-
-      // Signal background service worker to update chrome.alarms immediately
-      try {
-        chrome.runtime.sendMessage({ type: 'SCHEDULE_SYNC_ALARMS' });
-      } catch {}
-    } catch (e) {
-      console.warn('[ProText] chrome.storage.local write failed:', e);
+      notifyAlarmSync();
+    } catch (e: any) {
+      if (!e?.message?.includes('Extension context invalidated')) {
+        console.warn('[ProText] chrome.storage.local write failed:', e);
+      }
     }
   }
 
@@ -716,19 +730,17 @@ export async function saveScheduledMessage(msg: ScheduledMessage): Promise<Sched
 
 export async function deleteScheduledMessage(id: string): Promise<void> {
   // 1. Remove from chrome.storage.local
-  if (typeof chrome !== 'undefined' && chrome.storage?.local) {
+  if (isExtensionContextValid() && chrome.storage?.local) {
     try {
       const data = await chrome.storage.local.get(SCHEDULED_STORAGE_KEY);
       const list: ScheduledMessage[] = Array.isArray(data[SCHEDULED_STORAGE_KEY]) ? data[SCHEDULED_STORAGE_KEY] : [];
       const filtered = list.filter(m => m.id !== id);
       await chrome.storage.local.set({ [SCHEDULED_STORAGE_KEY]: filtered });
-
-      // Signal background service worker to remove the alarm
-      try {
-        chrome.runtime.sendMessage({ type: 'SCHEDULE_SYNC_ALARMS' });
-      } catch {}
-    } catch (e) {
-      console.warn('[ProText] chrome.storage.local delete failed:', e);
+      notifyAlarmSync();
+    } catch (e: any) {
+      if (!e?.message?.includes('Extension context invalidated')) {
+        console.warn('[ProText] chrome.storage.local delete failed:', e);
+      }
     }
   }
 

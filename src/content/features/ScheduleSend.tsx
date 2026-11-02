@@ -743,9 +743,11 @@ export function ScheduleSendFeature() {
     }
 
     return () => {
-      if (typeof chrome !== 'undefined' && chrome.runtime?.onMessage) {
-        chrome.runtime.onMessage.removeListener(onRuntimeMessage);
-      }
+      try {
+        if (typeof chrome !== 'undefined' && chrome.runtime?.id && chrome.runtime?.onMessage) {
+          chrome.runtime.onMessage.removeListener(onRuntimeMessage);
+        }
+      } catch {}
     };
   }, [enabled]);
 
@@ -764,9 +766,11 @@ export function ScheduleSendFeature() {
     }
 
     return () => {
-      if (typeof chrome !== 'undefined' && chrome.storage?.onChanged) {
-        chrome.storage.onChanged.removeListener(onStorageChanged);
-      }
+      try {
+        if (typeof chrome !== 'undefined' && chrome.runtime?.id && chrome.storage?.onChanged) {
+          chrome.storage.onChanged.removeListener(onStorageChanged);
+        }
+      } catch {}
     };
   }, [enabled]);
 
@@ -774,6 +778,11 @@ export function ScheduleSendFeature() {
   useEffect(() => {
     if (!enabled) return;
     const timer = setInterval(() => {
+      // If extension context was invalidated (e.g. extension reloaded in dev mode), cease polling
+      if (typeof chrome !== 'undefined' && chrome.runtime && !chrome.runtime.id) {
+        clearInterval(timer);
+        return;
+      }
       void checkAndDispatch();
     }, 4000);
     return () => clearInterval(timer);

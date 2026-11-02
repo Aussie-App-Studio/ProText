@@ -71,8 +71,8 @@ if (typeof chrome !== 'undefined' && chrome.alarms) {
           chrome.tabs.sendMessage(targetTab.id, {
             type: 'PROTEXT_DISPATCH_SCHEDULED',
             messageId: msg.id
-          }).catch((err) => {
-            console.warn('[ProText ServiceWorker] Could not message tab:', err);
+          }).catch(() => {
+            // Target tab was closed, refreshed, or navigating; safe to ignore
           });
         }
       } else {
