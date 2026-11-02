@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Privacy Policy - ProText for Google Messages™</title>
+  <style>
+    :root {
+      --bg: #f8f9fa;
+      --card-bg: #ffffff;
+      --text: #202124;
+      --text-muted: #5f6368;
+      --primary: #1a73e8;
+      --primary-hover: #1557b0;
+      --border: #dadce0;
+      --code-bg: #f1f3f4;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #131314;
+        --card-bg: #1e1f20;
+        --text: #e8eaed;
+        --text-muted: #9aa0a6;
+        --primary: #8ab4f8;
+        --primary-hover: #aecbfa;
+        --border: #3c4043;
+        --code-bg: #2d2f31;
+      }
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+      padding: 32px 16px;
+    }
+    .container {
+      max-width: 780px;
+      margin: 0 auto;
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 36px 32px;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.06);
+    }
+    header {
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 24px;
+      margin-bottom: 28px;
+    }
+    .badge {
+      display: inline-block;
+      background: rgba(26, 115, 232, 0.12);
+      color: var(--primary);
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      padding: 4px 10px;
+      border-radius: 6px;
+      margin-bottom: 12px;
+    }
+    h1 {
+      font-size: 26px;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      margin-bottom: 8px;
+    }
+    .meta {
+      font-size: 13px;
+      color: var(--text-muted);
+    }
+    h2 {
+      font-size: 18px;
+      font-weight: 600;
+      margin-top: 28px;
+      margin-bottom: 12px;
+      color: var(--primary);
+    }
+    p, ul {
+      margin-bottom: 14px;
+      font-size: 14px;
+    }
+    ul { padding-left: 20px; }
+    li { margin-bottom: 6px; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 16px 0;
+      font-size: 13px;
+    }
+    th, td {
+      border: 1px solid var(--border);
+      padding: 10px 12px;
+      text-align: left;
+    }
+    th {
+      background: var(--code-bg);
+      font-weight: 600;
+    }
+    .highlight-box {
+      background: rgba(26, 115, 232, 0.08);
+      border-left: 4px solid var(--primary);
+      padding: 14px 18px;
+      border-radius: 0 8px 8px 0;
+      margin: 18px 0;
+      font-size: 13.5px;
+    }
+    a {
+      color: var(--primary);
+      text-decoration: none;
+    }
+    a:hover { text-decoration: underline; }
+    footer {
+      margin-top: 36px;
+      padding-top: 20px;
+      border-top: 1px solid var(--border);
+      font-size: 12px;
+      color: var(--text-muted);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <span class="badge">Privacy Policy</span>
+      <h1>ProText for Google Messages™</h1>
+      <div class="meta">
+        <strong>Developer:</strong> Aussie App Studio &bull; 
+        <strong>Effective Date:</strong> November 2, 2026 &bull; 
+        <a href="https://github.com/Aussie-App-Studio/ProText" target="_blank">GitHub Repository</a>
+      </div>
+    </header>
+
+    <div class="highlight-box">
+      <strong>Core Commitment:</strong> ProText is 100% local-first and private by design. Your messages, contacts, notes, and preferences are stored exclusively on your device in your browser's local database. We operate <strong>zero external tracking or collection servers</strong>.
+    </div>
+
+    <h2>1. Data Collection & Transmission</h2>
+    <p>ProText does <strong>not</strong> collect, transmit, share, or sell any personal data:</p>
+    <ul>
+      <li><strong>No Remote Servers:</strong> ProText has no analytics servers, cloud databases, or tracking endpoints. Zero packets containing your communications leave your machine.</li>
+      <li><strong>No Telemetry or Analytics:</strong> We do not track pageviews, user actions, conversation counts, or messaging frequency.</li>
+      <li><strong>No Advertising:</strong> ProText is 100% ad-free and contains no affiliate trackers or monetized data brokers.</li>
+    </ul>
+
+    <h2>2. Data Stored Locally on Your Device</h2>
+    <p>The following data is saved inside your browser's sandboxed <code>IndexedDB</code> storage and never leaves your computer:</p>
+    <table>
+      <thead>
+        <tr>
+          <th>Category</th>
+          <th>Purpose</th>
+          <th>Storage Mode</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>Appearance & Themes</strong></td>
+          <td>Active theme selections, custom CSS colors, dark/light mode overrides</td>
+          <td>Browser IndexedDB</td>
+        </tr>
+        <tr>
+          <td><strong>Contact CRM Notes</strong></td>
+          <td>Private local notes, contact aliases, and follow-up tags</td>
+          <td>Browser IndexedDB</td>
+        </tr>
+        <tr>
+          <td><strong>Message Templates</strong></td>
+          <td>Saved snippets and fast-reply template texts</td>
+          <td>Browser IndexedDB</td>
+        </tr>
+        <tr>
+          <td><strong>Undo Send Buffer</strong></td>
+          <td>3-second dispatch cancellation buffer</td>
+          <td>Temporary RAM only</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h2>3. Chrome Extension Permissions</h2>
+    <p>ProText adheres strictly to Google's <em>Minimum Permissions Policy</em>:</p>
+    <ul>
+      <li><code>storage</code>: Used to preserve your local themes, notes, and feature toggles between browser sessions.</li>
+      <li><code>https://messages.google.com/web/*</code>: Required to display the ProText toolbar, theme overlay, and message safeguards inside Google Messages. ProText cannot access or interact with any other website.</li>
+    </ul>
+
+    <h2>4. Data Ownership & Deletion</h2>
+    <p>You have absolute control over all your data:</p>
+    <ul>
+      <li><strong>Exporting:</strong> Open <em>ProText Settings &rarr; Data Backup & Sync</em> to download a complete <code>.json</code> backup anytime.</li>
+      <li><strong>Deleting:</strong> Clearing site data for <code>messages.google.com</code> or uninstalling the extension immediately wipes all local ProText data permanently.</li>
+    </ul>
+
+    <h2>5. Contact & Bug Reports</h2>
+    <p>For questions or feature suggestions, use our Google Form or visit the open GitHub repository:</p>
+    <ul>
+      <li><a href="https://forms.gle/Wxa7cr21a7kYGQuM9" target="_blank">Feedback & Bug Report Google Form</a></li>
+      <li><a href="https://github.com/Aussie-App-Studio/ProText" target="_blank">GitHub: Aussie-App-Studio/ProText</a></li>
+    </ul>
+
+    <footer>
+      <span>&copy; 2026 Aussie App Studio. All rights reserved.</span>
+      <span>Google Messages is a trademark of Google LLC. ProText is an independent project.</span>
+    </footer>
+  </div>
+</body>
+</html>
