@@ -130,7 +130,7 @@ export const FEATURES: readonly FeatureDefinition[] = [
     id: 'resizableInput',
     category: 'composer',
     label: 'Resizable message box',
-    description: 'Drag a handle above the message box to make it taller. Off = Google\'s normal behaviour.'
+    description: 'Drag handles on the message box to make it taller or wider (great for ultrawide screens). Double-click to reset. Off = Google\'s normal behaviour.'
   },
   {
     id: 'emojiBar',

@@ -65,7 +65,7 @@ export function toTransparentRgba(color: string): string {
 
 export interface ThemeCssConfig {
   bodyBg: string;
-  sidebarBg: string;
+  sidebarBg?: string;
   headerBg?: string;
   sidebarBorder?: string;
   selectedBg: string;
@@ -85,10 +85,11 @@ export interface ThemeCssConfig {
 
 export function createThemeCss(cfg: ThemeCssConfig): string {
   const isDark = isDarkColor(cfg.bodyBg);
-  const border = cfg.sidebarBorder || (isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.08)');
+  const border = cfg.sidebarBorder || (isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.08)');
   const hoverBg = cfg.hoverBg || (isDark ? 'rgba(255, 255, 255, 0.04)' : 'rgba(0, 0, 0, 0.04)');
   const snippetColor = cfg.snippetColor || (isDark ? 'rgba(255, 255, 255, 0.6)' : 'rgba(0, 0, 0, 0.6)');
-  const headerBg = cfg.headerBg || (isDark ? '#131314' : '#ffffff');
+  const sidebarBg = cfg.sidebarBg || cfg.bodyBg;
+  const headerBg = cfg.headerBg || cfg.bodyBg;
 
   const transparentBodyBg = toTransparentRgba(cfg.bodyBg);
   const inputBoxBg = cfg.inputBoxBg || (isDark ? cfg.incomingBg : '#ffffff');
@@ -100,32 +101,42 @@ export function createThemeCss(cfg: ThemeCssConfig): string {
   const pickerFill = cfg.pickerFill || (isDark ? (cfg.incomingText || cfg.textColor) : 'rgba(0, 0, 0, 0.6)');
 
   return `
-    body, mw-conversation-container, [data-e2e-conversation-container] {
+    /* Universal Canvas: Top Bar, Sidebar, Conversations List, Chat Pane, Landing, and New Conv */
+    body, mw-app, mw-bootstrap, mw-g-ui-container, .main-container, mw-main-container,
+    mw-branded-header, mw-main-nav, .main-nav, .main-nav-header, mws-conversations-list,
+    mw-conversation-container, [data-e2e-conversation-container],
+    mw-main-landing, .main-landing,
+    mw-new-conversation-container, mw-new-conversation-container .new-conversation-container, mw-new-conversation,
+    mw-contacts-list, .contacts-container {
       background-color: ${cfg.bodyBg} !important;
       color: ${cfg.textColor} !important;
     }
 
-    /* Distinct Top Bar: clearly framed header bar */
+    /* Top Bar: subtle hairline border matching Google stock */
     mw-branded-header {
       background-color: ${headerBg} !important;
       border-bottom: 1px solid ${border} !important;
-      color: ${cfg.textColor} !important;
     }
 
-    /* Conversation Header on the right: matches top bar for cohesive framing */
-    mws-header, mw-conversation-header {
+    /* Sidebar: subtle hairline border separating left navigation from chat */
+    mw-main-nav {
+      background-color: ${sidebarBg} !important;
+      border-right: 1px solid ${border} !important;
+    }
+
+    /* Conversation Header: subtle hairline border matching Google stock */
+    mws-header, mw-conversation-header, .header,
+    mw-new-conversation-sub-header, mw-new-conversation-sub-header .sub-header, .new-conversation-sub-header,
+    mw-new-conversation-container mws-header, mw-new-conversation-container .header {
       background-color: ${headerBg} !important;
       border-bottom: 1px solid ${border} !important;
       color: ${cfg.textColor} !important;
     }
 
-    /* Entire Left Sidebar: UNIFIED across Start Chat, Folders, and Conversations List */
-    mw-main-nav, .main-nav-header, mws-conversations-list {
-      background-color: ${cfg.sidebarBg} !important;
+    /* Search Bar in topbar: Google's rounded pill */
+    mw-branded-header .search-container, mw-branded-header mws-search-bar {
+      background-color: ${cfg.incomingBg} !important;
       color: ${cfg.textColor} !important;
-    }
-    mw-main-nav {
-      border-right: 1px solid ${border} !important;
     }
     /* Hamburger menu flyout drawer theming */
     mw-nav-drawer, mw-nav-drawer nav.container, mw-nav-drawer .container {
@@ -336,8 +347,8 @@ export const BUILTIN_THEMES: BuiltinTheme[] = [
     css: createThemeCss({
       bodyBg: '#1e1f20',
       sidebarBg: '#1e1f20',
-      headerBg: '#131314',
-      sidebarBorder: 'rgba(255, 255, 255, 0.1)',
+      headerBg: '#1e1f20',
+      sidebarBorder: 'rgba(255, 255, 255, 0.08)',
       selectedBg: '#303134',
       hoverBg: '#282a2d',
       textColor: '#e3e3e3',

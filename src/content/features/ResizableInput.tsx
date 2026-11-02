@@ -5,48 +5,76 @@ import { useFeature } from '../settings/store';
 import { SEL } from '../selectors';
 import { getSetting, setSetting } from '../db';
 
-const KEY = 'inputMinHeight';
+const KEY_HEIGHT = 'inputMinHeight';
+const KEY_WIDTH = 'inputMaxWidth';
 const STYLE_ID = 'mp-resizable-input-css';
 const SINGLE_LINE = 48; // height of Google's one-line input
+const DEFAULT_COMPOSE_MAX_WIDTH = 975;
 
 /**
  * Default: do nothing (Google's own behaviour). Only once the user has manually dragged the box
- * taller than its default do we override. Google caps the composer at ~108px via an inline style set
- * by its JS; a stylesheet rule with !important beats inline styles, so we then (1) let the box
- * auto-grow to 70vh and (2) apply the dragged height as a min-height.
- * Rules target the contenteditable, not obfuscated classes.
+ * taller or wider than default do we override.
+ * Google caps the composer at ~108px height and 975px width via inline and stylesheet rules.
+ * Rules target structural elements, not obfuscated classes.
  */
-function applyCss(minHeight: number | null, extra: number) {
+function applyCss(minHeight: number | null, extra: number, maxWidth: number | null) {
   let style = document.getElementById(STYLE_ID) as HTMLStyleElement | null;
-  if (!style) { style = document.createElement('style'); style.id = STYLE_ID; document.head.appendChild(style); }
-  const totalPad = 48 + Math.max(0, Math.round(extra));
-  if (!minHeight) {
-    style.textContent = `${SEL.messagesContent} { padding-bottom: ${totalPad}px !important; }`;
-    return;
+  if (!style) {
+    style = document.createElement('style');
+    style.id = STYLE_ID;
+    document.head.appendChild(style);
   }
-  style.textContent = `
+  const totalPad = 48 + Math.max(0, Math.round(extra));
+
+  let css = `${SEL.messagesContent} { padding-bottom: ${totalPad}px !important; }\n`;
+
+  if (minHeight) {
+    css += `
     ${SEL.editable} {
       height: auto !important;
       max-height: 70vh !important;
       overflow-y: auto !important;
       min-height: ${minHeight}px !important;
-    }
-    /* The composer and secondary pill float over the message list, so pad the list accordingly. */
-    ${SEL.messagesContent} { padding-bottom: ${totalPad}px !important; }`;
+    }\n`;
+  }
+
+  if (maxWidth) {
+    css += `
+    ${SEL.composeContainer} {
+      max-width: ${maxWidth}px !important;
+    }\n`;
+  }
+
+  style.textContent = css;
 }
 
 function getEditable(): HTMLElement | null {
   return Array.from(document.querySelectorAll<HTMLElement>(SEL.editable)).find(e => e.offsetParent !== null) ?? null;
 }
 
+function getComposeContainer(): HTMLElement | null {
+  return document.querySelector<HTMLElement>(SEL.composeContainer) ?? null;
+}
+
 function Handle() {
   const [height, setHeight] = useState<number | null>(null);
-  const [dragging, setDragging] = useState(false);
+  const [width, setWidth] = useState<number | null>(null);
+  const [draggingHeight, setDraggingHeight] = useState(false);
+  const [draggingWidth, setDraggingWidth] = useState(false);
   const [extra, setExtra] = useState(0);
-  const drag = useRef<{ y: number; h: number } | null>(null);
 
-  useEffect(() => { getSetting<number | null>(KEY, null).then(setHeight); }, []);
-  useEffect(() => { applyCss(height, extra); }, [height, extra]);
+  const dragHeight = useRef<{ y: number; h: number } | null>(null);
+  const dragWidth = useRef<{ startX: number; startW: number; side: 'left' | 'right' } | null>(null);
+
+  useEffect(() => {
+    getSetting<number | null>(KEY_HEIGHT, null).then(setHeight);
+    getSetting<number | null>(KEY_WIDTH, null).then(setWidth);
+  }, []);
+
+  useEffect(() => {
+    applyCss(height, extra, width);
+  }, [height, extra, width]);
+
   useEffect(() => () => { document.getElementById(STYLE_ID)?.remove(); }, []);
 
   // Track how much taller than a single line the input currently is (covers typing AND dragging).
@@ -59,35 +87,131 @@ function Handle() {
     return () => ro.disconnect();
   }, [editable]);
 
-  const onDown = (e: React.PointerEvent) => {
+  // Height drag handlers
+  const onDownHeight = (e: React.PointerEvent) => {
     const ed = getEditable();
     if (!ed) return;
-    e.currentTarget.setPointerCapture(e.pointerId);
-    drag.current = { y: e.clientY, h: ed.getBoundingClientRect().height };
-    setDragging(true);
+    try { e.currentTarget.setPointerCapture(e.pointerId); } catch {}
+    dragHeight.current = { y: e.clientY, h: ed.getBoundingClientRect().height };
+    setDraggingHeight(true);
   };
-  const onMove = (e: React.PointerEvent) => {
-    if (!drag.current) return;
-    const next = drag.current.h + (drag.current.y - e.clientY); // dragging up grows the box
-    // Not taller than the default one-line box -> stay on Google's normal behaviour.
+
+  const onMoveHeight = (e: React.PointerEvent) => {
+    if (!dragHeight.current) return;
+    const next = dragHeight.current.h + (dragHeight.current.y - e.clientY); // dragging up grows the box
     setHeight(next <= SINGLE_LINE + 4 ? null : Math.round(Math.min(window.innerHeight * 0.7, next)));
   };
-  const onUp = () => {
-    if (!drag.current) return;
-    drag.current = null;
-    setDragging(false);
-    setHeight(h => { setSetting(KEY, h); return h; });
+
+  const onUpHeight = () => {
+    if (!dragHeight.current) return;
+    dragHeight.current = null;
+    setDraggingHeight(false);
+    setHeight(h => { setSetting(KEY_HEIGHT, h); return h; });
   };
-  const reset = () => { setHeight(null); setSetting(KEY, null); };
+
+  const resetHeight = () => {
+    setHeight(null);
+    setSetting(KEY_HEIGHT, null);
+  };
+
+  // Width drag handlers (symmetrical expansion around centered composer)
+  const onDownWidth = (e: React.PointerEvent, side: 'left' | 'right') => {
+    const cc = getComposeContainer();
+    if (!cc) return;
+    try { e.currentTarget.setPointerCapture(e.pointerId); } catch {}
+    dragWidth.current = {
+      startX: e.clientX,
+      startW: cc.getBoundingClientRect().width,
+      side
+    };
+    setDraggingWidth(true);
+  };
+
+  const onMoveWidth = (e: React.PointerEvent) => {
+    if (!dragWidth.current) return;
+    const { startX, startW, side } = dragWidth.current;
+    const delta = side === 'right' ? (e.clientX - startX) * 2 : (startX - e.clientX) * 2;
+    const next = Math.round(startW + delta);
+
+    const conv = document.querySelector(SEL.conversationContainer);
+    const maxAllowed = conv ? Math.round(conv.getBoundingClientRect().width - 40) : Math.round(window.innerWidth * 0.95);
+    const clamped = Math.max(550, Math.min(maxAllowed, next));
+
+    if (Math.abs(clamped - DEFAULT_COMPOSE_MAX_WIDTH) <= 16) {
+      setWidth(null);
+    } else {
+      setWidth(clamped);
+    }
+  };
+
+  const onUpWidth = () => {
+    if (!dragWidth.current) return;
+    dragWidth.current = null;
+    setDraggingWidth(false);
+    setWidth(w => {
+      setSetting(KEY_WIDTH, w);
+      return w;
+    });
+  };
+
+  const resetWidth = (e: React.MouseEvent) => {
+    if (e.altKey || e.shiftKey) {
+      const conv = document.querySelector(SEL.conversationContainer);
+      const full = conv ? Math.round(conv.getBoundingClientRect().width - 60) : Math.round(window.innerWidth * 0.95);
+      setWidth(full);
+      setSetting(KEY_WIDTH, full);
+      return;
+    }
+    setWidth(null);
+    setSetting(KEY_WIDTH, null);
+  };
 
   return (
-    <div
-      onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp} onPointerCancel={onUp}
-      onDoubleClick={reset}
-      title="Drag to resize the message box · double-click to reset"
-      className="pointer-events-auto group flex h-2.5 w-24 cursor-ns-resize touch-none items-center justify-center select-none"
-    >
-      <div className={`h-1 w-9 rounded-full transition-colors ${dragging ? 'bg-[#a8c7fa]' : 'bg-[#dadce0]/25 group-hover:bg-[#a8c7fa]'}`} />
+    <div className="absolute inset-0 pointer-events-none">
+      {/* Top Handle (Height) */}
+      <div className="absolute top-0 left-0 right-0 flex justify-center pointer-events-none">
+        <div
+          onPointerDown={onDownHeight}
+          onPointerMove={onMoveHeight}
+          onPointerUp={onUpHeight}
+          onPointerCancel={onUpHeight}
+          onDoubleClick={resetHeight}
+          title="Drag to resize message box height · double-click to reset"
+          className="pointer-events-auto group flex h-2.5 w-24 cursor-ns-resize touch-none items-center justify-center select-none"
+        >
+          <div className={`h-1 w-9 rounded-full transition-colors ${draggingHeight ? 'bg-[#a8c7fa]' : 'bg-[#dadce0]/25 group-hover:bg-[#a8c7fa]'}`} />
+        </div>
+      </div>
+
+      {/* Left Handle (Width) */}
+      <div className="absolute left-0 top-0 bottom-0 flex items-center pointer-events-none">
+        <div
+          onPointerDown={(e) => onDownWidth(e, 'left')}
+          onPointerMove={onMoveWidth}
+          onPointerUp={onUpWidth}
+          onPointerCancel={onUpWidth}
+          onDoubleClick={resetWidth}
+          title="Drag to resize message box width · double-click to reset · Alt+double-click for full width"
+          className="pointer-events-auto group flex h-12 w-2.5 cursor-ew-resize touch-none items-center justify-center select-none -ml-1"
+        >
+          <div className={`w-1 h-7 rounded-full transition-colors ${draggingWidth ? 'bg-[#a8c7fa]' : 'bg-[#dadce0]/25 group-hover:bg-[#a8c7fa]'}`} />
+        </div>
+      </div>
+
+      {/* Right Handle (Width) */}
+      <div className="absolute right-0 top-0 bottom-0 flex items-center pointer-events-none">
+        <div
+          onPointerDown={(e) => onDownWidth(e, 'right')}
+          onPointerMove={onMoveWidth}
+          onPointerUp={onUpWidth}
+          onPointerCancel={onUpWidth}
+          onDoubleClick={resetWidth}
+          title="Drag to resize message box width · double-click to reset · Alt+double-click for full width"
+          className="pointer-events-auto group flex h-12 w-2.5 cursor-ew-resize touch-none items-center justify-center select-none -mr-1"
+        >
+          <div className={`w-1 h-7 rounded-full transition-colors ${draggingWidth ? 'bg-[#a8c7fa]' : 'bg-[#dadce0]/25 group-hover:bg-[#a8c7fa]'}`} />
+        </div>
+      </div>
     </div>
   );
 }
@@ -100,7 +224,7 @@ export function ResizableInput() {
       anchor="mws-message-compose .input-box"
       position="prepend"
       id="resize-handle"
-      hostStyle="position:absolute;top:0;left:0;right:0;z-index:20;display:flex;justify-content:center;pointer-events:none;"
+      hostStyle="position:absolute;inset:0;z-index:20;pointer-events:none;"
     >
       <Handle />
     </Slot>

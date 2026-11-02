@@ -42,8 +42,12 @@ Master checklist of all features in the **Messages+** Chrome extension for Googl
   - **Status**: **VERIFIED**
 
 - [x] **5. Resizable Message Composer** (`resizableInput`)
-  - **Description**: Draggable handle bar directly above the composer allowing users to expand the text box vertically for composing long messages.
-  - **Verification Details**: Verified working well by user. Drag handle resizes composer smoothly and persists height preferences.
+  - **Description**: Draggable handle bars on the composer allowing users to expand the text box vertically (top handle) and horizontally (left & right side handles) for ultrawide screens.
+  - **Verification Details**: Verified working in live composer on standard and wide viewports.
+    1. Top handle resizes composer height smoothly and persists preferences.
+    2. Left and right side handles allow symmetrical horizontal width resizing for ultrawide displays.
+    3. Double-clicking any handle resets height or width back to Google's default.
+    4. Alt+double-click on side handles snaps to full conversation width.
   - **Status**: **VERIFIED**
 
 - [x] **6. Quick Emoji Bar** (`emojiBar`)
