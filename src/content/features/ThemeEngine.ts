@@ -102,6 +102,9 @@ export function createThemeCss(cfg: ThemeCssConfig): string {
       background-color: ${cfg.bodyBg} !important;
       color: ${cfg.textColor} !important;
     }
+    mw-branded-header {
+      border-bottom: 1px solid ${border} !important;
+    }
     mw-main-nav {
       background-color: ${cfg.sidebarBg} !important;
       border-right: 1px solid ${border} !important;
