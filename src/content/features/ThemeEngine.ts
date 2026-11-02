@@ -67,6 +67,7 @@ export interface ThemeCssConfig {
   bodyBg: string;
   sidebarBg?: string;
   headerBg?: string;
+  headerBorder?: string;
   sidebarBorder?: string;
   selectedBg: string;
   hoverBg?: string;
@@ -86,6 +87,8 @@ export interface ThemeCssConfig {
 export function createThemeCss(cfg: ThemeCssConfig): string {
   const isDark = isDarkColor(cfg.bodyBg);
   const border = cfg.sidebarBorder || (isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.08)');
+  const headerBorder = cfg.headerBorder || (isDark ? 'rgb(60, 64, 67)' : 'rgba(0, 0, 0, 0.08)');
+  const sidebarBorder = cfg.sidebarBorder || (isDark ? 'rgb(32, 33, 36)' : border);
   const hoverBg = cfg.hoverBg || (isDark ? 'rgba(255, 255, 255, 0.04)' : 'rgba(0, 0, 0, 0.04)');
   const snippetColor = cfg.snippetColor || (isDark ? 'rgba(255, 255, 255, 0.6)' : 'rgba(0, 0, 0, 0.6)');
   const sidebarBg = cfg.sidebarBg || cfg.bodyBg;
@@ -101,9 +104,8 @@ export function createThemeCss(cfg: ThemeCssConfig): string {
   const pickerFill = cfg.pickerFill || (isDark ? (cfg.incomingText || cfg.textColor) : 'rgba(0, 0, 0, 0.6)');
 
   return `
-    /* Universal Canvas: Top Bar, Sidebar, Conversations List, Chat Pane, Landing, and New Conv */
+    /* Universal Canvas: Chat Pane, Landing Zero-State, and New Conv Container */
     body, mw-app, mw-bootstrap, mw-g-ui-container, .main-container, mw-main-container,
-    mw-branded-header, mw-main-nav, .main-nav, .main-nav-header, mws-conversations-list,
     mw-conversation-container, [data-e2e-conversation-container],
     mw-main-landing, .main-landing,
     mw-new-conversation-container, mw-new-conversation-container .new-conversation-container, mw-new-conversation,
@@ -112,24 +114,34 @@ export function createThemeCss(cfg: ThemeCssConfig): string {
       color: ${cfg.textColor} !important;
     }
 
-    /* Top Bar: subtle hairline border matching Google stock */
+    /* Top Bar: subtle hairline bottom border matching Google stock */
     mw-branded-header {
       background-color: ${headerBg} !important;
-      border-bottom: 1px solid ${border} !important;
+      border-bottom: 1px solid ${headerBorder} !important;
+      color: ${cfg.textColor} !important;
     }
 
-    /* Sidebar: subtle hairline border separating left navigation from chat */
-    mw-main-nav {
+    /* Entire Left Sidebar: UNIFIED navigation surface across Start Chat, Folders, and Conversations List */
+    mw-main-nav, .main-nav, .main-nav-header, mws-conversations-list {
       background-color: ${sidebarBg} !important;
-      border-right: 1px solid ${border} !important;
+      color: ${cfg.textColor} !important;
+    }
+    mw-main-nav {
+      border-right: 1px solid ${sidebarBorder} !important;
     }
 
-    /* Conversation Header: subtle hairline border matching Google stock */
-    mws-header, mw-conversation-header, .header,
+    /* Conversation Header: NO bottom border in Google Messages stock, transparent so it merges into conversation canvas */
+    mws-header, mw-conversation-header, mw-conversation-container .header {
+      background-color: transparent !important;
+      border-bottom: none !important;
+      color: ${cfg.textColor} !important;
+    }
+
+    /* Start chat / New conversation subheader ("To:" recipient row) */
     mw-new-conversation-sub-header, mw-new-conversation-sub-header .sub-header, .new-conversation-sub-header,
     mw-new-conversation-container mws-header, mw-new-conversation-container .header {
-      background-color: ${headerBg} !important;
-      border-bottom: 1px solid ${border} !important;
+      background-color: ${cfg.bodyBg} !important;
+      border-bottom: 1px solid ${headerBorder} !important;
       color: ${cfg.textColor} !important;
     }
 
@@ -343,22 +355,23 @@ export const BUILTIN_THEMES: BuiltinTheme[] = [
     id: 'default_dark',
     name: 'Default Dark',
     category: 'dark',
-    dotColor: '#1e1f20',
+    dotColor: '#202124',
     css: createThemeCss({
-      bodyBg: '#1e1f20',
-      sidebarBg: '#1e1f20',
-      headerBg: '#1e1f20',
-      sidebarBorder: 'rgba(255, 255, 255, 0.08)',
-      selectedBg: '#303134',
-      hoverBg: '#282a2d',
-      textColor: '#e3e3e3',
+      bodyBg: '#202124',
+      sidebarBg: '#2a2b2e',
+      headerBg: '#202124',
+      headerBorder: 'rgb(60, 64, 67)',
+      sidebarBorder: 'rgb(32, 33, 36)',
+      selectedBg: 'rgba(248, 249, 250, 0.06)',
+      hoverBg: 'rgba(255, 255, 255, 0.04)',
+      textColor: '#e8eaed',
       snippetColor: '#9aa0a6',
-      outgoingBg: '#0b57d0',
+      outgoingBg: '#1a73e8',
       outgoingText: '#ffffff',
       incomingBg: '#303134',
-      incomingText: '#e3e3e3',
+      incomingText: '#e8eaed',
       inputBoxBg: '#303134',
-      inputBoxBorder: 'rgba(255, 255, 255, 0.08)',
+      inputBoxBorder: 'transparent',
       placeholderColor: '#9aa0a6',
       pickerFill: '#9aa0a6'
     })
@@ -703,19 +716,19 @@ export function getThemePalette(
       return {
         themeId,
         isLight: false,
-        boxBg: '#1e1f20',
-        boxBorder: 'rgba(255, 255, 255, 0.12)',
-        textColor: '#e3e3e3',
+        boxBg: '#2a2b2e',
+        boxBorder: 'rgb(60, 64, 67)',
+        textColor: '#e8eaed',
         mutedTextColor: '#9aa0a6',
-        dividerBorder: '#303134',
-        avatarBg: '#0b57d0',
+        dividerBorder: '#3c4043',
+        avatarBg: '#1a73e8',
         avatarText: '#ffffff',
-        outgoingBg: '#0b57d0',
+        outgoingBg: '#1a73e8',
         outgoingText: '#ffffff',
         incomingBg: '#303134',
-        incomingText: '#e3e3e3',
-        snippetBg: '#282a2d',
-        snippetBorder: 'rgba(255, 255, 255, 0.08)',
+        incomingText: '#e8eaed',
+        snippetBg: '#2a2b2e',
+        snippetBorder: 'rgb(60, 64, 67)',
         boxShadow: '0 12px 28px rgba(0, 0, 0, 0.5)'
       };
 

@@ -548,7 +548,7 @@ function SmartTabsBar() {
           className={`absolute left-0 top-0 bottom-0 z-10 flex items-center pr-5 pl-1 pointer-events-none transition-opacity duration-200 ${
             isLight
               ? 'bg-gradient-to-r from-white via-white/95 to-transparent'
-              : 'bg-gradient-to-r from-[#1e1f20] via-[#1e1f20]/95 to-transparent'
+              : 'bg-gradient-to-r from-[#2a2b2e] via-[#2a2b2e]/95 to-transparent'
           }`}
         >
           <button
@@ -575,7 +575,7 @@ function SmartTabsBar() {
           className={`absolute right-0 top-0 bottom-0 z-10 flex items-center pl-5 pr-1 pointer-events-none transition-opacity duration-200 ${
             isLight
               ? 'bg-gradient-to-l from-white via-white/95 to-transparent'
-              : 'bg-gradient-to-l from-[#1e1f20] via-[#1e1f20]/95 to-transparent'
+              : 'bg-gradient-to-l from-[#2a2b2e] via-[#2a2b2e]/95 to-transparent'
           }`}
         >
           <button

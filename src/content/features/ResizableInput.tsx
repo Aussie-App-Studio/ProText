@@ -38,7 +38,8 @@ function applyCss(minHeight: number | null, extra: number, maxWidth: number | nu
     }\n`;
   }
 
-  if (maxWidth) {
+  // Only apply custom width if it's strictly wider than Google's default
+  if (maxWidth && maxWidth > DEFAULT_COMPOSE_MAX_WIDTH) {
     css += `
     ${SEL.composeContainer} {
       max-width: ${maxWidth}px !important;
@@ -64,7 +65,7 @@ function Handle() {
   const [extra, setExtra] = useState(0);
 
   const dragHeight = useRef<{ y: number; h: number } | null>(null);
-  const dragWidth = useRef<{ startX: number; startW: number; side: 'left' | 'right' } | null>(null);
+  const dragWidth = useRef<{ startX: number; startW: number } | null>(null);
 
   useEffect(() => {
     getSetting<number | null>(KEY_HEIGHT, null).then(setHeight);
@@ -114,34 +115,34 @@ function Handle() {
     setSetting(KEY_HEIGHT, null);
   };
 
-  // Width drag handlers (symmetrical expansion around centered composer)
-  const onDownWidth = (e: React.PointerEvent, side: 'left' | 'right') => {
+  // Width drag handlers (symmetrical expansion, cannot shrink below default 975px)
+  const onDownWidth = (e: React.PointerEvent) => {
     const cc = getComposeContainer();
     if (!cc) return;
     try { e.currentTarget.setPointerCapture(e.pointerId); } catch {}
     dragWidth.current = {
       startX: e.clientX,
-      startW: cc.getBoundingClientRect().width,
-      side
+      startW: cc.getBoundingClientRect().width
     };
     setDraggingWidth(true);
   };
 
   const onMoveWidth = (e: React.PointerEvent) => {
     if (!dragWidth.current) return;
-    const { startX, startW, side } = dragWidth.current;
-    const delta = side === 'right' ? (e.clientX - startX) * 2 : (startX - e.clientX) * 2;
+    const { startX, startW } = dragWidth.current;
+    // Dragging left (startX - e.clientX > 0) widens the container symmetrically
+    const delta = (startX - e.clientX) * 2;
     const next = Math.round(startW + delta);
+
+    // Cannot make smaller than Google's default size (975px)
+    if (next <= DEFAULT_COMPOSE_MAX_WIDTH + 8) {
+      setWidth(null);
+      return;
+    }
 
     const conv = document.querySelector(SEL.conversationContainer);
     const maxAllowed = conv ? Math.round(conv.getBoundingClientRect().width - 40) : Math.round(window.innerWidth * 0.95);
-    const clamped = Math.max(550, Math.min(maxAllowed, next));
-
-    if (Math.abs(clamped - DEFAULT_COMPOSE_MAX_WIDTH) <= 16) {
-      setWidth(null);
-    } else {
-      setWidth(clamped);
-    }
+    setWidth(Math.min(maxAllowed, next));
   };
 
   const onUpWidth = () => {
@@ -183,33 +184,18 @@ function Handle() {
         </div>
       </div>
 
-      {/* Left Handle (Width) */}
-      <div className="absolute left-0 top-0 bottom-0 flex items-center pointer-events-none">
+      {/* Left Handle (Width) - Tiny, tucked inside the left rim of the pill */}
+      <div className="absolute left-2 top-0 bottom-0 flex items-center pointer-events-none">
         <div
-          onPointerDown={(e) => onDownWidth(e, 'left')}
+          onPointerDown={onDownWidth}
           onPointerMove={onMoveWidth}
           onPointerUp={onUpWidth}
           onPointerCancel={onUpWidth}
           onDoubleClick={resetWidth}
-          title="Drag to resize message box width · double-click to reset · Alt+double-click for full width"
-          className="pointer-events-auto group flex h-12 w-2.5 cursor-ew-resize touch-none items-center justify-center select-none -ml-1"
+          title="Drag left to widen message box · double-click to reset"
+          className="pointer-events-auto group flex h-6 w-3 cursor-ew-resize touch-none items-center justify-center select-none"
         >
-          <div className={`w-1 h-7 rounded-full transition-colors ${draggingWidth ? 'bg-[#a8c7fa]' : 'bg-[#dadce0]/25 group-hover:bg-[#a8c7fa]'}`} />
-        </div>
-      </div>
-
-      {/* Right Handle (Width) */}
-      <div className="absolute right-0 top-0 bottom-0 flex items-center pointer-events-none">
-        <div
-          onPointerDown={(e) => onDownWidth(e, 'right')}
-          onPointerMove={onMoveWidth}
-          onPointerUp={onUpWidth}
-          onPointerCancel={onUpWidth}
-          onDoubleClick={resetWidth}
-          title="Drag to resize message box width · double-click to reset · Alt+double-click for full width"
-          className="pointer-events-auto group flex h-12 w-2.5 cursor-ew-resize touch-none items-center justify-center select-none -mr-1"
-        >
-          <div className={`w-1 h-7 rounded-full transition-colors ${draggingWidth ? 'bg-[#a8c7fa]' : 'bg-[#dadce0]/25 group-hover:bg-[#a8c7fa]'}`} />
+          <div className={`w-[3px] h-3.5 rounded-full transition-colors ${draggingWidth ? 'bg-[#a8c7fa]' : 'bg-[#dadce0]/30 group-hover:bg-[#a8c7fa]'}`} />
         </div>
       </div>
     </div>
