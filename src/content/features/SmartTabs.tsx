@@ -1,4 +1,4 @@
-import { useEffect, useState, useSyncExternalStore } from 'react';
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { createPortal } from 'react-dom';
 import { Slot } from '../Slot';
 import { SEL } from '../selectors';
@@ -11,7 +11,7 @@ import {
   type SmartRule
 } from '../db';
 import { useFollowUps } from './FollowUp';
-import { FlagIcon, TuneIcon } from '../ui/MaterialIcons';
+import { FlagIcon, TuneIcon, ChevronLeftIcon, ChevronRightIcon } from '../ui/MaterialIcons';
 import { useThemeMode } from './ThemeEngine';
 
 const STYLE_ID = 'mp-smart-tabs-filter-css';
@@ -432,6 +432,105 @@ function SmartTabsBar() {
   const themeMode = useThemeMode();
   const isLight = themeMode === 'light';
 
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const isDraggingRef = useRef(false);
+  const startXRef = useRef(0);
+  const scrollLeftRef = useRef(0);
+  const hasDraggedRef = useRef(false);
+  const [canScrollLeft, setCanScrollLeft] = useState(false);
+  const [canScrollRight, setCanScrollRight] = useState(false);
+
+  const updateScrollState = useCallback(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const atStart = el.scrollLeft <= 2;
+    const atEnd = el.scrollLeft + el.clientWidth >= el.scrollWidth - 2;
+    setCanScrollLeft(!atStart);
+    setCanScrollRight(!atEnd);
+  }, []);
+
+  // Listen for wheel, scroll, and container resize
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+
+    updateScrollState();
+
+    const handleWheel = (e: WheelEvent) => {
+      // Natural horizontal scrolling via standard vertical mouse wheel
+      if (e.deltaY !== 0) {
+        el.scrollLeft += e.deltaY;
+        e.preventDefault();
+        updateScrollState();
+      }
+    };
+
+    el.addEventListener('wheel', handleWheel, { passive: false });
+    el.addEventListener('scroll', updateScrollState, { passive: true });
+
+    let ro: ResizeObserver | null = null;
+    if (typeof ResizeObserver !== 'undefined') {
+      ro = new ResizeObserver(() => {
+        updateScrollState();
+      });
+      ro.observe(el);
+    }
+
+    return () => {
+      el.removeEventListener('wheel', handleWheel);
+      el.removeEventListener('scroll', updateScrollState);
+      ro?.disconnect();
+    };
+  }, [updateScrollState]);
+
+  // Recalculate scroll state when tabs change
+  useEffect(() => {
+    const timer = setTimeout(updateScrollState, 50);
+    return () => clearTimeout(timer);
+  }, [tabs, updateScrollState]);
+
+  // Smoothly keep the active tab in view if selected
+  useEffect(() => {
+    if (!scrollRef.current) return;
+    const activeEl = scrollRef.current.querySelector<HTMLElement>(`[data-tab-id="${activeTabId}"]`);
+    if (activeEl) {
+      activeEl.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' });
+      setTimeout(updateScrollState, 300);
+    }
+  }, [activeTabId, updateScrollState]);
+
+  // Drag-to-scroll support for mouse/trackpad users
+  const handleMouseDown = (e: React.MouseEvent) => {
+    if (e.button !== 0) return;
+    isDraggingRef.current = true;
+    hasDraggedRef.current = false;
+    startXRef.current = e.pageX;
+    scrollLeftRef.current = scrollRef.current?.scrollLeft || 0;
+  };
+
+  const handleMouseMove = (e: React.MouseEvent) => {
+    if (!isDraggingRef.current || !scrollRef.current) return;
+    const dx = e.pageX - startXRef.current;
+    if (Math.abs(dx) > 4) {
+      hasDraggedRef.current = true;
+      scrollRef.current.scrollLeft = scrollLeftRef.current - dx;
+      updateScrollState();
+    }
+  };
+
+  const handleMouseUp = () => {
+    isDraggingRef.current = false;
+    setTimeout(() => {
+      hasDraggedRef.current = false;
+    }, 60);
+  };
+
+  const scrollByAmount = (amount: number) => {
+    if (!scrollRef.current) return;
+    scrollRef.current.scrollBy({ left: amount, behavior: 'smooth' });
+    setTimeout(updateScrollState, 250);
+  };
+
   const handleCreateTab = () => {
     setEditingTab({
       id: `tab-${Date.now()}`,
@@ -442,17 +541,82 @@ function SmartTabsBar() {
   };
 
   return (
-    <div className="font-sans">
+    <div className="font-sans relative w-full max-w-full min-w-0 select-none group/smarttabs">
+      {/* Left Chevron Button with Gradient Mask */}
+      {canScrollLeft && (
+        <div
+          className={`absolute left-0 top-0 bottom-0 z-10 flex items-center pr-5 pl-1 pointer-events-none transition-opacity duration-200 ${
+            isLight
+              ? 'bg-gradient-to-r from-white via-white/95 to-transparent'
+              : 'bg-gradient-to-r from-[#131314] via-[#131314]/95 to-transparent'
+          }`}
+        >
+          <button
+            type="button"
+            onClick={e => {
+              e.stopPropagation();
+              scrollByAmount(-140);
+            }}
+            title="Scroll tabs left"
+            className={`pointer-events-auto flex h-6 w-6 cursor-pointer items-center justify-center rounded-full shadow-md border transition-all hover:scale-110 active:scale-95 ${
+              isLight
+                ? 'bg-white border-[#dadce0] text-gray-700 hover:bg-gray-100'
+                : 'bg-[#282a2d] border-[#dadce0]/20 text-gray-200 hover:bg-[#3c4043]'
+            }`}
+          >
+            <ChevronLeftIcon size={14} />
+          </button>
+        </div>
+      )}
+
+      {/* Right Chevron Button with Gradient Mask */}
+      {canScrollRight && (
+        <div
+          className={`absolute right-0 top-0 bottom-0 z-10 flex items-center pl-5 pr-1 pointer-events-none transition-opacity duration-200 ${
+            isLight
+              ? 'bg-gradient-to-l from-white via-white/95 to-transparent'
+              : 'bg-gradient-to-l from-[#131314] via-[#131314]/95 to-transparent'
+          }`}
+        >
+          <button
+            type="button"
+            onClick={e => {
+              e.stopPropagation();
+              scrollByAmount(140);
+            }}
+            title="Scroll tabs right"
+            className={`pointer-events-auto flex h-6 w-6 cursor-pointer items-center justify-center rounded-full shadow-md border transition-all hover:scale-110 active:scale-95 ${
+              isLight
+                ? 'bg-white border-[#dadce0] text-gray-700 hover:bg-gray-100'
+                : 'bg-[#282a2d] border-[#dadce0]/20 text-gray-200 hover:bg-[#3c4043]'
+            }`}
+          >
+            <ChevronRightIcon size={14} />
+          </button>
+        </div>
+      )}
+
       {/* Scrollable Material 3 Filter Chip Bar */}
-      <div className="flex items-center gap-1.5 px-3 py-2 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" data-testid="smart-tabs-bar">
+      <div
+        ref={scrollRef}
+        onMouseDown={handleMouseDown}
+        onMouseMove={handleMouseMove}
+        onMouseUp={handleMouseUp}
+        onMouseLeave={handleMouseUp}
+        className="flex items-center gap-1.5 px-3 py-2 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden cursor-grab active:cursor-grabbing w-full min-w-0"
+        data-testid="smart-tabs-bar"
+      >
         {tabs.map(tab => {
           const isActive = activeTabId === tab.id;
           const cleanName = tab.name.replace(/^(?:🚩|★|☆)\s*/u, '');
           return (
-            <div key={tab.id} className="relative group shrink-0">
+            <div key={tab.id} data-tab-id={tab.id} className="relative group shrink-0">
               <button
-                onClick={() => setActiveTabId(tab.id)}
-                className={`flex h-7 cursor-pointer items-center gap-1.5 rounded-full border px-3 text-[12px] font-medium transition-colors ${
+                onClick={() => {
+                  if (hasDraggedRef.current) return;
+                  setActiveTabId(tab.id);
+                }}
+                className={`flex h-7 cursor-pointer items-center gap-1.5 rounded-full border px-2.5 text-[12px] font-medium whitespace-nowrap transition-colors ${
                   isActive
                     ? isLight
                       ? 'border-[#0b57d0] bg-[#0b57d0] text-white shadow-xs'
@@ -515,7 +679,10 @@ function SmartTabsBar() {
 
         {/* Add Tab Button */}
         <button
-          onClick={handleCreateTab}
+          onClick={() => {
+            if (hasDraggedRef.current) return;
+            handleCreateTab();
+          }}
           title="Add new Smart Tab"
           className={`shrink-0 flex h-7 w-7 cursor-pointer items-center justify-center rounded-full border text-sm font-medium transition-colors ${
             isLight
@@ -538,6 +705,12 @@ function SmartTabsBar() {
             await reload();
             setActiveTabId(updated.id);
             setEditingTab(null);
+            setTimeout(() => {
+              if (scrollRef.current) {
+                scrollRef.current.scrollTo({ left: scrollRef.current.scrollWidth, behavior: 'smooth' });
+                updateScrollState();
+              }
+            }, 150);
           }}
         />
       )}
@@ -550,7 +723,12 @@ export function SmartTabs() {
   if (!enabled) return null;
 
   return (
-    <Slot anchor={SEL.conversationsList} position="before" id="smart-tabs">
+    <Slot
+      anchor={SEL.conversationsList}
+      position="before"
+      id="smart-tabs"
+      hostStyle="display: block; width: 100%; max-width: 100%; min-width: 0; overflow: hidden;"
+    >
       <SmartTabsBar />
     </Slot>
   );

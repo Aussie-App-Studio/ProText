@@ -47,6 +47,7 @@ export function Slot({ anchor, position, id, className, hostStyle, children }: {
 
     shadow.adoptedStyleSheets = [getSheet()];
     const inner = document.createElement('div');
+    inner.style.cssText = 'width: 100%; max-width: 100%; min-width: 0;';
     shadow.appendChild(inner);
 
     const place = () => {

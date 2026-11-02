@@ -162,6 +162,116 @@ export function createThemeCss(cfg: ThemeCssConfig): string {
       background-color: ${inputBoxBg} !important;
       color: ${inputTextColor} !important;
     }
+
+    /* Empty / Landing view (No conversation selected) */
+    mw-main-landing, .main-landing, mw-main-container, .main-container {
+      background-color: ${cfg.bodyBg} !important;
+      color: ${cfg.textColor} !important;
+    }
+    mw-main-landing .title, .main-landing .title {
+      color: ${cfg.textColor} !important;
+    }
+    mw-main-landing .sub-title, .main-landing .sub-title {
+      color: ${snippetColor} !important;
+    }
+    mw-main-landing .landing-img, .main-landing .landing-img {
+      opacity: ${isDark ? '0.75' : '1'} !important;
+    }
+
+    /* Start chat / New conversation container */
+    mw-new-conversation-container, mw-new-conversation-container .new-conversation-container, mw-new-conversation {
+      background-color: ${cfg.bodyBg} !important;
+      color: ${cfg.textColor} !important;
+    }
+    mw-new-conversation-container mws-header, mw-new-conversation-container .header {
+      background-color: ${cfg.bodyBg} !important;
+      color: ${cfg.textColor} !important;
+    }
+    mw-new-conversation-container .title-text, mw-new-conversation-container h2 {
+      color: ${cfg.textColor} !important;
+    }
+    mw-new-conversation-container [data-e2e-header-back-button], mw-new-conversation-container button[mat-icon-button] {
+      color: ${cfg.textColor} !important;
+    }
+
+    /* Start chat recipient topbar & subheader */
+    mw-new-conversation-sub-header, mw-new-conversation-sub-header .sub-header, .new-conversation-sub-header {
+      background-color: ${cfg.bodyBg} !important;
+      border-bottom: 1px solid ${border} !important;
+      color: ${cfg.textColor} !important;
+    }
+    mw-new-conversation-sub-header .label, .contact-chip-input .label {
+      color: ${snippetColor} !important;
+    }
+    mw-contact-chips-input, mw-contact-chips-input .input-container, mw-contact-chips-input .input-list {
+      background-color: transparent !important;
+      color: ${cfg.textColor} !important;
+    }
+    mw-contact-chips-input input, mw-contact-chips-input input.input, [data-e2e-contact-input] {
+      background-color: transparent !important;
+      color: ${cfg.textColor} !important;
+    }
+    mw-contact-chips-input input::placeholder, [data-e2e-contact-input]::placeholder {
+      color: ${placeholderColor} !important;
+    }
+
+    /* Recipient Chips (Those present in chat) */
+    mat-chip-listbox, .mat-mdc-chip-listbox, .mdc-evolution-chip-set {
+      background-color: transparent !important;
+    }
+    mat-chip-option, mat-chip-row, mat-chip, .mat-mdc-chip, .contact-chip, .mdc-evolution-chip {
+      background-color: ${cfg.incomingBg} !important;
+      color: ${cfg.incomingText || cfg.textColor} !important;
+      border: 1px solid ${border} !important;
+    }
+    .mdc-evolution-chip__cell, .mdc-evolution-chip__action, .mat-mdc-chip-action,
+    .mat-mdc-chip-action-label, .mdc-evolution-chip__text-label,
+    .mdc-evolution-chip__text-label span, .contact-chip .name {
+      color: ${cfg.incomingText || cfg.textColor} !important;
+    }
+    .mdc-evolution-chip__checkmark-svg, .mdc-evolution-chip__checkmark-path,
+    .mat-mdc-chip-remove svg, .mat-mdc-chip-remove, .mat-mdc-chip-graphic, .mdc-evolution-chip__icon {
+      stroke: ${cfg.incomingText || cfg.textColor} !important;
+      color: ${cfg.incomingText || cfg.textColor} !important;
+      fill: ${cfg.incomingText || cfg.textColor} !important;
+    }
+
+    /* Contacts picker & contacts list in Start chat */
+    mw-contacts-list, .contacts-container {
+      background-color: ${cfg.bodyBg} !important;
+      color: ${cfg.textColor} !important;
+    }
+    mw-contacts-list .label, mw-contacts-list .top-contacts-group-label, mw-contacts-list .group-label {
+      color: ${snippetColor} !important;
+    }
+    mw-contact-row {
+      background-color: transparent !important;
+      color: ${cfg.textColor} !important;
+    }
+    mw-contact-row:hover, mw-contact-row.hover, mw-contact-row:focus-within, mw-contact-row .contact.hover {
+      background-color: ${hoverBg} !important;
+    }
+    mw-contact-row .name, mw-contact-row [data-e2e-contact-name], mw-contact-row .contact-name, mw-contact-row span {
+      color: ${cfg.textColor} !important;
+    }
+    mw-contact-row .info-number, mw-contact-row .details, mw-contact-row .phone-number, mw-contact-row .mid-dot {
+      color: ${snippetColor} !important;
+    }
+    mw-new-conversation-start-group-button button, .start-group-button, [data-e2e-start-group-chat-button] {
+      color: ${cfg.outgoingBg} !important;
+    }
+    mw-contact-chips-input .next-button, button[data-e2e-next-button] {
+      background-color: ${cfg.outgoingBg} !important;
+      color: ${cfg.outgoingText} !important;
+    }
+    button.load-more, mw-contacts-list .load-more {
+      background-color: ${cfg.incomingBg} !important;
+      color: ${cfg.textColor} !important;
+      border: 1px solid ${border} !important;
+    }
+    mw-skeleton-loader .skeleton-avatar, mw-skeleton-loader .skeleton-line {
+      background-color: ${hoverBg} !important;
+    }
   `;
 }
 
