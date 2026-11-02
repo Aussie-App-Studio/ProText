@@ -126,3 +126,4 @@ function createZip(sourceDir, outPath) {
 }
 
 createZip('dist', 'protext-v0.1.0.zip');
+createZip('dist', 'protext-v0.1.1.zip');
