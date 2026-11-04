@@ -15,6 +15,7 @@ class AutoResponder {
   private active = false;
   private rules: AutoRule[] = [];
   private observer: MutationObserver | null = null;
+  private scanScheduled = false;
   private seenMessages = new WeakSet<Element>();
   private lastRepliedTimes = new Map<string, number>();
   private wakeLock: any = null;
@@ -59,8 +60,15 @@ class AutoResponder {
     this.active = true;
     this.markExistingMessages();
 
-    // Observe document for new incoming messages
-    this.observer = new MutationObserver(() => this.scanForIncoming());
+    // Observe document for new incoming messages, coalesced via requestAnimationFrame
+    this.observer = new MutationObserver(() => {
+      if (this.scanScheduled) return;
+      this.scanScheduled = true;
+      requestAnimationFrame(() => {
+        this.scanScheduled = false;
+        void this.scanForIncoming();
+      });
+    });
     this.observer.observe(document.body, { childList: true, subtree: true });
 
     // Enable keepalive
@@ -110,15 +118,17 @@ class AutoResponder {
   }
 
   private markExistingMessages() {
-    const msgs = document.querySelectorAll(`[${attr.outgoing}="false"]`);
+    const root = document.querySelector(SEL.messagesList) || document;
+    const msgs = root.querySelectorAll(`[${attr.outgoing}="false"]`);
     msgs.forEach(m => this.seenMessages.add(m));
   }
 
   private async scanForIncoming() {
     if (!this.active || this.rules.length === 0) return;
 
-    // Find incoming messages
-    const incomingEls = document.querySelectorAll(`[${attr.outgoing}="false"]`);
+    // Find incoming messages (scoped to message list when present)
+    const root = document.querySelector(SEL.messagesList) || document;
+    const incomingEls = root.querySelectorAll(`[${attr.outgoing}="false"]`);
     const newEls = Array.from(incomingEls).filter(el => !this.seenMessages.has(el));
     if (newEls.length === 0) return;
 

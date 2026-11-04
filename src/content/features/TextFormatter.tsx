@@ -74,10 +74,14 @@ export function TextFormatter() {
     }
 
     const checkSelection = () => {
-      const ed = Array.from(document.querySelectorAll<HTMLElement>(SEL.editable)).find(e => e.offsetParent !== null);
-      const ta = Array.from(document.querySelectorAll<HTMLTextAreaElement>(SEL.textarea)).find(e => e.offsetParent !== null);
+      const activeEl = document.activeElement as HTMLElement | null;
+      if (!activeEl) {
+        setToolbarPos(null);
+        return;
+      }
 
-      if (ed && (document.activeElement === ed || ed.contains(document.activeElement))) {
+      const ed = activeEl.closest?.(SEL.editable) as HTMLElement | null;
+      if (ed) {
         const sel = window.getSelection();
         if (!sel || sel.isCollapsed || !sel.toString().trim()) {
           setToolbarPos(null);
@@ -93,7 +97,8 @@ export function TextFormatter() {
           });
           return;
         }
-      } else if (ta && document.activeElement === ta) {
+      } else if (activeEl.matches?.(SEL.textarea)) {
+        const ta = activeEl as HTMLTextAreaElement;
         if (ta.selectionStart !== ta.selectionEnd) {
           const rect = ta.getBoundingClientRect();
           setToolbarPos({
@@ -108,17 +113,18 @@ export function TextFormatter() {
     };
 
     const handleKeyDown = (e: KeyboardEvent) => {
-      const ed = Array.from(document.querySelectorAll<HTMLElement>(SEL.editable)).find(e => e.offsetParent !== null);
-      const ta = Array.from(document.querySelectorAll<HTMLTextAreaElement>(SEL.textarea)).find(e => e.offsetParent !== null);
-      const isFocused = (ed && (document.activeElement === ed || ed.contains(document.activeElement))) ||
-                        (ta && document.activeElement === ta);
+      if (!e.ctrlKey && !e.metaKey) return;
+      if (e.key !== 'b' && e.key !== 'B' && e.key !== 'i' && e.key !== 'I') return;
 
+      const activeEl = document.activeElement as HTMLElement | null;
+      if (!activeEl) return;
+      const isFocused = Boolean(activeEl.closest?.(SEL.editable) || activeEl.matches?.(SEL.textarea));
       if (!isFocused) return;
 
-      if ((e.ctrlKey || e.metaKey) && (e.key === 'b' || e.key === 'B')) {
+      if (e.key === 'b' || e.key === 'B') {
         e.preventDefault();
         wrapSelection('*');
-      } else if ((e.ctrlKey || e.metaKey) && (e.key === 'i' || e.key === 'I')) {
+      } else if (e.key === 'i' || e.key === 'I') {
         e.preventDefault();
         wrapSelection('_');
       }

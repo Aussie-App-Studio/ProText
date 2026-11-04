@@ -549,7 +549,11 @@ export function FullSettingsPage({ embedded = false }: { embedded?: boolean } = 
                     <button
                       type="button"
                       onClick={() => setShowEmojiSettings(v => !v)}
-                      className="cursor-pointer rounded-lg bg-gray-200 dark:bg-white/10 hover:bg-gray-300 dark:hover:bg-white/15 px-3 py-1 text-xs font-semibold transition-colors"
+                      className={`cursor-pointer rounded-lg border px-3 py-1 text-xs font-semibold transition-colors ${
+                        isLight
+                          ? 'border-transparent bg-gray-200 hover:bg-gray-300 text-gray-800'
+                          : 'border-white/15 bg-white/10 hover:bg-white/20 text-white hover:border-white/25'
+                      }`}
                     >
                       {showEmojiSettings ? 'Done' : 'Customize Emojis'}
                     </button>

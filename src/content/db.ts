@@ -320,32 +320,58 @@ function notifyAlarmSync(): void {
 }
 
 // Settings (stored in chrome.storage.local for cross-origin sync with welcome page, with IndexedDB fallback/mirror)
-export async function getSetting<T>(key: string, fallback: T): Promise<T> {
-  const storageKey = `setting_${key}`;
-  if (isExtensionContextValid() && chrome.storage?.local) {
+// Batched into a single preload on startup to avoid 8+ separate IPC and IndexedDB transactions.
+let settingsMapPromise: Promise<Map<string, unknown>> | null = null;
+
+function loadAllSettingsOnce(): Promise<Map<string, unknown>> {
+  return (settingsMapPromise ??= (async () => {
+    const map = new Map<string, unknown>();
+
+    // 1. Load IndexedDB settings first as baseline
     try {
-      const res = await chrome.storage.local.get(storageKey);
-      if (res && res[storageKey] !== undefined) {
-        return res[storageKey] as T;
-      }
+      const db = await getDB();
+      const keys = await db.getAllKeys('settings');
+      await Promise.all(
+        keys.map(async k => {
+          const val = await db.get('settings', k);
+          if (val !== undefined) {
+            map.set(String(k), val);
+          }
+        })
+      );
     } catch {}
-  }
-  try {
-    const v = await (await getDB()).get('settings', key);
-    if (v !== undefined) {
-      if (isExtensionContextValid() && chrome.storage?.local) {
-        try {
-          void chrome.storage.local.set({ [storageKey]: v })?.catch?.(() => {});
-        } catch {}
-      }
-      return v as T;
+
+    // 2. Overlay chrome.storage.local settings (authoritative for cross-tab sync)
+    if (isExtensionContextValid() && chrome.storage?.local) {
+      try {
+        const all = await chrome.storage.local.get(null);
+        if (all && typeof all === 'object') {
+          for (const [k, v] of Object.entries(all)) {
+            if (k.startsWith('setting_') && v !== undefined) {
+              map.set(k.slice('setting_'.length), v);
+            }
+          }
+        }
+      } catch {}
     }
-  } catch {}
+
+    return map;
+  })());
+}
+
+export async function getSetting<T>(key: string, fallback: T): Promise<T> {
+  const map = await loadAllSettingsOnce();
+  if (map.has(key)) {
+    return map.get(key) as T;
+  }
   return fallback;
 }
 
 export async function setSetting(key: string, value: unknown) {
   const storageKey = `setting_${key}`;
+  if (settingsMapPromise) {
+    void settingsMapPromise.then(m => m.set(key, value));
+  }
   if (isExtensionContextValid() && chrome.storage?.local) {
     try {
       await chrome.storage.local.set({ [storageKey]: value });
@@ -844,7 +870,7 @@ export async function importAllData(backup: MessagesPlusBackup): Promise<{
 
   if (backup.data.settings && Array.isArray(backup.data.settings)) {
     for (const item of backup.data.settings) {
-      await db.put('settings', item.value, item.key as any);
+      await setSetting(String(item.key), item.value);
     }
     counts.settings = backup.data.settings.length;
   }

@@ -1,5 +1,6 @@
 import { useEffect, useState, useSyncExternalStore } from 'react';
 import { Slot } from '../Slot';
+import { useActiveConversationId, watchSidebar } from '../engine';
 import { SEL } from '../selectors';
 import { getAllAliases, saveAlias } from '../db';
 import { useFeature } from '../settings/store';
@@ -36,40 +37,9 @@ export function useAliases() {
   return { aliases, loaded: aliasesLoaded, reload: reloadAliases };
 }
 
-function useActiveConversationId(): string | null {
-  const [id, setId] = useState<string | null>(() => {
-    const m = location.pathname.match(/\/conversations\/([^/?#]+)/);
-    return m ? m[1] : null;
-  });
-
-  useEffect(() => {
-    let scheduled = false;
-    const update = () => {
-      scheduled = false;
-      const m = location.pathname.match(/\/conversations\/([^/?#]+)/);
-      const next = m ? m[1] : null;
-      setId(prev => (prev === next ? prev : next));
-    };
-    update();
-    const schedule = () => {
-      if (scheduled) return;
-      scheduled = true;
-      requestAnimationFrame(update);
-    };
-    const mo = new MutationObserver(schedule);
-    mo.observe(document.documentElement, { childList: true, subtree: true });
-    window.addEventListener('popstate', update);
-    return () => {
-      mo.disconnect();
-      window.removeEventListener('popstate', update);
-    };
-  }, []);
-
-  return id;
-}
-
 /** Injected under / next to the conversation title in the header */
 export function HeaderAliasBadge() {
+  const enabled = useFeature('crmAliases');
   const conversationId = useActiveConversationId();
   const { aliases, reload } = useAliases();
   const [editing, setEditing] = useState(false);
@@ -82,7 +52,7 @@ export function HeaderAliasBadge() {
     setEditing(false);
   }, [conversationId, currentAlias]);
 
-  if (!conversationId) return null;
+  if (!enabled || !conversationId) return null;
 
   const handleSave = async () => {
     await saveAlias(conversationId, inputVal);
@@ -159,8 +129,10 @@ function SidebarAliasEnhancer() {
   const { aliases } = useAliases();
 
   useEffect(() => {
-    const decorate = () => {
-      const items = document.querySelectorAll('mws-conversation-list-item');
+    const hasAliases = Object.keys(aliases).length > 0;
+
+    const unwatch = watchSidebar((sidebar, items) => {
+      if (!hasAliases && !sidebar.querySelector('.mp-alias-badge')) return;
       items.forEach(item => {
         const link = item.querySelector('a[data-e2e-conversation]');
         const href = link?.getAttribute('href') || '';
@@ -180,33 +152,17 @@ function SidebarAliasEnhancer() {
               badge.textContent = aliases[convId];
               nameSpan.after(badge);
             }
-          } else {
+          } else if (existingBadge.textContent !== aliases[convId]) {
             existingBadge.textContent = aliases[convId];
           }
-        } else {
-          existingBadge?.remove();
+        } else if (existingBadge) {
+          existingBadge.remove();
         }
       });
-    };
-
-    let scheduled = false;
-    const scheduleDecorate = () => {
-      if (scheduled) return;
-      scheduled = true;
-      requestAnimationFrame(() => {
-        scheduled = false;
-        decorate();
-      });
-    };
-
-    decorate();
-
-    const mo = new MutationObserver(scheduleDecorate);
-    const sidebar = document.querySelector(SEL.conversationsList) || document.documentElement;
-    mo.observe(sidebar, { childList: true, subtree: true });
+    });
 
     return () => {
-      mo.disconnect();
+      unwatch();
       document.querySelectorAll('.mp-alias-badge').forEach(b => b.remove());
     };
   }, [aliases]);
@@ -216,6 +172,13 @@ function SidebarAliasEnhancer() {
 
 export function CrmAlias() {
   const enabled = useFeature('crmAliases');
+
+  useEffect(() => {
+    if (!enabled) {
+      document.querySelectorAll('.mp-alias-badge').forEach(b => b.remove());
+    }
+  }, [enabled]);
+
   if (!enabled) return null;
   return <SidebarAliasEnhancer />;
 }

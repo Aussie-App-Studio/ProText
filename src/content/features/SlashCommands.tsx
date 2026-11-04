@@ -58,10 +58,14 @@ export function SlashCommands() {
     }
 
     const checkCaret = () => {
-      const ed = Array.from(document.querySelectorAll<HTMLElement>(SEL.editable)).find(e => e.offsetParent !== null);
-      const ta = Array.from(document.querySelectorAll<HTMLTextAreaElement>(SEL.textarea)).find(e => e.offsetParent !== null);
+      const activeEl = document.activeElement as HTMLElement | null;
+      if (!activeEl) {
+        setTrigger(null);
+        return;
+      }
 
-      if (ed && (document.activeElement === ed || ed.contains(document.activeElement))) {
+      const ed = activeEl.closest?.(SEL.editable) as HTMLElement | null;
+      if (ed) {
         const sel = window.getSelection();
         if (!sel || !sel.isCollapsed || !sel.focusNode) {
           setTrigger(null);
@@ -84,7 +88,8 @@ export function SlashCommands() {
           });
           return;
         }
-      } else if (ta && document.activeElement === ta) {
+      } else if (activeEl.matches?.(SEL.textarea)) {
+        const ta = activeEl as HTMLTextAreaElement;
         const offset = ta.selectionStart;
         const textBefore = ta.value.slice(0, offset);
         const match = textBefore.match(/(?:^|\s)\/([a-zA-Z0-9_-]*)$/);

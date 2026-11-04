@@ -21,7 +21,7 @@ for (const e of entries) {
       outDir: 'dist',
       emptyOutDir: !!e.first,
       cssCodeSplit: false,
-      minify: false,
+      minify: !watch,
       sourcemap: false,
       watch: watch ? {} : null,
       lib: { entry: e.file, name: 'MessagesPlus_' + e.name, formats: ['iife'], fileName: () => e.name + '.js', cssFileName: e.name }

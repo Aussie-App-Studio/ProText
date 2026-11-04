@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Slot } from '../Slot';
+import { watchAnchor } from '../engine';
 import { SEL } from '../selectors';
 import {
   FEATURES,
@@ -25,9 +26,7 @@ import { SettingsGearIcon } from '../ui/MaterialIcons';
 /** Ensures "Messages+ Settings" is placed natively inside Google's top-left hamburger menu right beside Settings */
 export function useHamburgerMenuSettingsItem() {
   useEffect(() => {
-    const ensureMenuItem = () => {
-      const middleNavList = document.querySelector('.middle-nav-list');
-      if (!middleNavList) return;
+    const injectIntoMenu = (middleNavList: Element) => {
       if (middleNavList.querySelector('.mp-nav-drawer-item')) return;
 
       const settingsItem = middleNavList.querySelector('mw-nav-drawer-item');
@@ -70,10 +69,21 @@ export function useHamburgerMenuSettingsItem() {
       settingsItem.after(clone);
     };
 
-    ensureMenuItem();
-    const mo = new MutationObserver(ensureMenuItem);
-    mo.observe(document.documentElement, { childList: true, subtree: true });
-    return () => mo.disconnect();
+    let listObserver: MutationObserver | null = null;
+    const unwatch = watchAnchor('.middle-nav-list', el => {
+      listObserver?.disconnect();
+      listObserver = null;
+      if (el) {
+        injectIntoMenu(el);
+        listObserver = new MutationObserver(() => injectIntoMenu(el));
+        listObserver.observe(el, { childList: true });
+      }
+    });
+
+    return () => {
+      unwatch();
+      listObserver?.disconnect();
+    };
   }, []);
 }
 

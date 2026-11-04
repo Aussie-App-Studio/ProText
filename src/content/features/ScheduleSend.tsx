@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { Slot } from '../Slot';
+import { useActiveConversationId } from '../engine';
 import { SEL } from '../selectors';
 import {
   getScheduledMessages,
@@ -93,16 +94,20 @@ export function detectPhoneDisconnected(): boolean {
   const alertEls = document.querySelectorAll(
     'mw-connection-status, .connection-status, mw-banner, [role="alert"], mws-conversations-list-banner'
   );
-  for (const el of Array.from(alertEls)) {
-    if ((el as HTMLElement).offsetParent !== null) {
-      const t = (el.textContent || '').toLowerCase();
-      if (
-        t.includes('reach your phone') ||
-        t.includes('phone not connected') ||
-        t.includes('phone is offline') ||
-        t.includes('reconnecting to phone') ||
-        t.includes('waiting for your phone')
-      ) {
+  for (let i = 0; i < alertEls.length; i++) {
+    const el = alertEls[i];
+    const raw = el.textContent;
+    if (!raw) continue;
+    const t = raw.toLowerCase();
+    // Check text content FIRST before reading offsetParent to avoid forcing synchronous layout/reflow
+    if (
+      t.includes('reach your phone') ||
+      t.includes('phone not connected') ||
+      t.includes('phone is offline') ||
+      t.includes('reconnecting to phone') ||
+      t.includes('waiting for your phone')
+    ) {
+      if ((el as HTMLElement).offsetParent !== null) {
         return true;
       }
     }
@@ -110,25 +115,51 @@ export function detectPhoneDisconnected(): boolean {
   return false;
 }
 
-/** React hook tracking phone connection status */
+let phoneConnectedSnapshot = true;
+const phoneListeners = new Set<() => void>();
+let phoneObserver: MutationObserver | null = null;
+let phoneInterval: ReturnType<typeof setInterval> | null = null;
+let phoneCheckScheduled = false;
+
+function checkPhoneConnection() {
+  phoneCheckScheduled = false;
+  const next = !detectPhoneDisconnected();
+  if (next !== phoneConnectedSnapshot) {
+    phoneConnectedSnapshot = next;
+    phoneListeners.forEach(l => l());
+  }
+}
+
+function schedulePhoneCheck() {
+  if (phoneCheckScheduled) return;
+  phoneCheckScheduled = true;
+  requestAnimationFrame(checkPhoneConnection);
+}
+
+function subscribePhoneConnection(cb: () => void) {
+  if (phoneListeners.size === 0 && typeof document !== 'undefined' && document.body) {
+    phoneConnectedSnapshot = !detectPhoneDisconnected();
+    phoneObserver = new MutationObserver(schedulePhoneCheck);
+    phoneObserver.observe(document.body, { childList: true, subtree: true });
+    phoneInterval = setInterval(checkPhoneConnection, 3000);
+  }
+  phoneListeners.add(cb);
+  return () => {
+    phoneListeners.delete(cb);
+    if (phoneListeners.size === 0) {
+      phoneObserver?.disconnect();
+      phoneObserver = null;
+      if (phoneInterval) {
+        clearInterval(phoneInterval);
+        phoneInterval = null;
+      }
+    }
+  };
+}
+
+/** React hook tracking phone connection status (shared & rAF-coalesced) */
 export function usePhoneConnectionStatus(): boolean {
-  const [connected, setConnected] = useState(!detectPhoneDisconnected());
-
-  useEffect(() => {
-    const check = () => {
-      setConnected(!detectPhoneDisconnected());
-    };
-    check();
-    const id = setInterval(check, 2500);
-    const mo = new MutationObserver(check);
-    mo.observe(document.body, { childList: true, subtree: true, attributes: true });
-    return () => {
-      clearInterval(id);
-      mo.disconnect();
-    };
-  }, []);
-
-  return connected;
+  return useSyncExternalStore(subscribePhoneConnection, () => phoneConnectedSnapshot);
 }
 
 /** Reads current text in Google Messages composer */
@@ -318,19 +349,12 @@ export function ScheduleSendComposerButton() {
 function InlineScheduledQueue() {
   const { scheduled } = useScheduleSendStore();
   const isPhoneConnected = usePhoneConnectionStatus();
-  const [convId, setConvId] = useState(getActiveConversationId());
+  const convId = useActiveConversationId() || '';
   const [expanded, setExpanded] = useState(true);
   const [activeActionId, setActiveActionId] = useState<string | null>(null);
 
   useEffect(() => {
-    const id = setInterval(() => {
-      const curr = getActiveConversationId();
-      if (curr !== convId) {
-        setConvId(curr);
-        setActiveActionId(null);
-      }
-    }, 400);
-    return () => clearInterval(id);
+    setActiveActionId(null);
   }, [convId]);
 
   const chatScheduled = scheduled.filter(m => m.conversationId === convId);

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
+import { useActiveConversationId, watchSidebar } from '../engine';
 import { SEL } from '../selectors';
 import {
   getFollowUps,
@@ -39,42 +40,11 @@ export function useFollowUps() {
   return { followUps, loaded: followUpsLoaded, reload: reloadFollowUps };
 }
 
-function useActiveConversationId(): string | null {
-  const [id, setId] = useState<string | null>(() => {
-    const m = location.pathname.match(/\/conversations\/([^/?#]+)/);
-    return m ? m[1] : null;
-  });
-
-  useEffect(() => {
-    let scheduled = false;
-    const update = () => {
-      scheduled = false;
-      const m = location.pathname.match(/\/conversations\/([^/?#]+)/);
-      const next = m ? m[1] : null;
-      setId(prev => (prev === next ? prev : next));
-    };
-    update();
-    const schedule = () => {
-      if (scheduled) return;
-      scheduled = true;
-      requestAnimationFrame(update);
-    };
-    const mo = new MutationObserver(schedule);
-    mo.observe(document.documentElement, { childList: true, subtree: true });
-    window.addEventListener('popstate', update);
-    return () => {
-      mo.disconnect();
-      window.removeEventListener('popstate', update);
-    };
-  }, []);
-
-  return id;
-}
-
 const PRESET_TIMEFRAMES = ['Today', 'Tomorrow', 'In 2 Days', 'This Sunday', 'Next Week'];
 
 /** Header action button in conversation toolbar */
 export function HeaderFollowUpButton() {
+  const enabled = useFeature('crmNotes');
   const conversationId = useActiveConversationId();
   const { followUps, reload } = useFollowUps();
   const [popoverOpen, setPopoverOpen] = useState(false);
@@ -98,7 +68,8 @@ export function HeaderFollowUpButton() {
   useEffect(() => {
     if (!popoverOpen) return;
     const onMouseDown = (e: MouseEvent) => {
-      if (popoverRef.current && !popoverRef.current.contains(e.target as Node)) {
+      const path = e.composedPath ? e.composedPath() : [];
+      if (popoverRef.current && !path.includes(popoverRef.current) && !popoverRef.current.contains(e.target as Node)) {
         setPopoverOpen(false);
       }
     };
@@ -106,7 +77,7 @@ export function HeaderFollowUpButton() {
     return () => document.removeEventListener('mousedown', onMouseDown);
   }, [popoverOpen]);
 
-  if (!conversationId) return null;
+  if (!enabled || !conversationId) return null;
 
   const handleAddTag = async (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -206,11 +177,14 @@ export function HeaderFollowUpButton() {
 
       {/* Popover to view/edit note or mark followed up */}
       {popoverOpen && (
-        <div className={`absolute top-8 left-0 z-[2147483645] w-72 rounded-xl border p-3 shadow-2xl backdrop-blur-md text-xs ${
-          isLight
-            ? 'border-[#dadce0] bg-white text-gray-900'
-            : 'border-gray-700/80 bg-[#1e2025] text-gray-200'
-        }`}>
+        <div
+          onMouseDown={e => e.stopPropagation()}
+          className={`absolute top-8 left-0 z-[2147483645] w-72 rounded-xl border p-3 backdrop-blur-md text-xs ${
+            isLight
+              ? 'border-[#dadce0] bg-white text-gray-900 shadow-[0_12px_36px_rgba(0,0,0,0.18)]'
+              : 'border-white/15 bg-[#1e2025] text-gray-200 shadow-[0_12px_36px_rgba(0,0,0,0.7)] ring-1 ring-white/10'
+          }`}
+        >
           <div className={`flex items-center justify-between border-b pb-2 mb-2.5 ${
             isLight ? 'border-gray-200' : 'border-gray-800'
           }`}>
@@ -354,8 +328,10 @@ function SidebarFollowUpEnhancer() {
 
   useEffect(() => {
     ensureBadgeStyle();
-    const decorate = () => {
-      const items = document.querySelectorAll('mws-conversation-list-item');
+    const hasFollowUps = Object.keys(followUps).length > 0;
+
+    const unwatch = watchSidebar((sidebar, items) => {
+      if (!hasFollowUps && !sidebar.querySelector('.mp-followup-badge')) return;
       items.forEach(item => {
         const link = item.querySelector('a[data-e2e-conversation]');
         const href = link?.getAttribute('href') || '';
@@ -396,33 +372,17 @@ function SidebarFollowUpEnhancer() {
 
               nameSpan.after(badge);
             }
-          } else {
+          } else if ((existingBadge as HTMLElement).title !== titleText) {
             (existingBadge as HTMLElement).title = titleText;
           }
-        } else {
-          existingBadge?.remove();
+        } else if (existingBadge) {
+          existingBadge.remove();
         }
       });
-    };
-
-    let scheduled = false;
-    const scheduleDecorate = () => {
-      if (scheduled) return;
-      scheduled = true;
-      requestAnimationFrame(() => {
-        scheduled = false;
-        decorate();
-      });
-    };
-
-    decorate();
-
-    const mo = new MutationObserver(scheduleDecorate);
-    const sidebar = document.querySelector(SEL.conversationsList) || document.documentElement;
-    mo.observe(sidebar, { childList: true, subtree: true });
+    });
 
     return () => {
-      mo.disconnect();
+      unwatch();
       document.querySelectorAll('.mp-followup-badge').forEach(b => b.remove());
     };
   }, [followUps]);

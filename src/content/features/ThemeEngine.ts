@@ -130,9 +130,9 @@ export function createThemeCss(cfg: ThemeCssConfig): string {
       border-right: 1px solid ${sidebarBorder} !important;
     }
 
-    /* Conversation Header: NO bottom border in Google Messages stock, transparent so it merges into conversation canvas */
+    /* Conversation Header: Solid surface so scrolled messages never bleed through */
     mws-header, mw-conversation-header, mw-conversation-container .header {
-      background-color: transparent !important;
+      background-color: ${headerBg} !important;
       border-bottom: none !important;
       color: ${cfg.textColor} !important;
     }

@@ -125,5 +125,5 @@ function createZip(sourceDir, outPath) {
   files.forEach(f => console.log(`  ✓ ${f.rel}`));
 }
 
-createZip('dist', 'protext-v0.1.0.zip');
-createZip('dist', 'protext-v0.1.1.zip');
+const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+createZip('dist', `protext-v${pkg.version}.zip`);

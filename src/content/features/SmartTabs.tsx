@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { createPortal } from 'react-dom';
 import { Slot } from '../Slot';
+import { watchSidebar } from '../engine';
 import { SEL } from '../selectors';
 import { useFeature } from '../settings/store';
 import {
@@ -299,29 +300,9 @@ function SmartTabsBar() {
   const [editingTab, setEditingTab] = useState<SmartTab | null>(null);
   const [unreadCount, setUnreadCount] = useState<number>(0);
   const { followUps } = useFollowUps();
-
   const followUpCount = Object.keys(followUps).length;
 
-  // Keep unread count fresh
-  useEffect(() => {
-    let scheduled = false;
-    const computeUnread = () => {
-      scheduled = false;
-      const unreadLinks = document.querySelectorAll('mws-conversation-list-item a[data-e2e-is-unread="true"]');
-      setUnreadCount(unreadLinks.length);
-    };
-    computeUnread();
-    const schedule = () => {
-      if (scheduled) return;
-      scheduled = true;
-      requestAnimationFrame(computeUnread);
-    };
-    const mo = new MutationObserver(schedule);
-    mo.observe(document.documentElement, { childList: true, subtree: true, attributes: true, attributeFilter: ['data-e2e-is-unread'] });
-    return () => mo.disconnect();
-  }, []);
-
-  // Filter conversations according to active tab
+  // Keep unread count fresh and filter conversations via the single shared sidebar observer
   useEffect(() => {
     let style = document.getElementById(STYLE_ID) as HTMLStyleElement | null;
     if (!style) {
@@ -336,96 +317,65 @@ function SmartTabsBar() {
           display: none !important;
         }
       `;
-    } else if (activeTabId === 'needs_followup') {
+    } else {
       style.textContent = '';
-      const applyFollowUpFilter = () => {
-        const items = document.querySelectorAll('mws-conversation-list-item');
+    }
+
+    const currentTab =
+      activeTabId !== 'all' && activeTabId !== 'unread' && activeTabId !== 'needs_followup'
+        ? tabs.find(t => t.id === activeTabId)
+        : undefined;
+    const regexes = currentTab ? compileRulesToRegex(currentTab.rules) : [];
+
+    const clearInlineDisplay = () => {
+      document.querySelectorAll('mws-conversation-list-item').forEach(el => {
+        if ((el as HTMLElement).style.display !== '') {
+          (el as HTMLElement).style.display = '';
+        }
+      });
+    };
+
+    if (activeTabId === 'all' || activeTabId === 'unread') {
+      clearInlineDisplay();
+    }
+
+    const unwatch = watchSidebar((sidebar, items) => {
+      // 1. Update unread badge count
+      const unreadLinks = sidebar.querySelectorAll('mws-conversation-list-item a[data-e2e-is-unread="true"]');
+      setUnreadCount(unreadLinks.length);
+
+      // 2. Apply tab filtering if needed
+      if (activeTabId === 'needs_followup') {
         items.forEach(item => {
           const link = item.querySelector('a[data-e2e-conversation]');
           const href = link?.getAttribute('href') || '';
           const match = href.match(/\/conversations\/([^/?#]+)/);
           const convId = match ? match[1] : null;
           const isFlagged = convId ? !!followUps[convId]?.flagged : false;
-          (item as HTMLElement).style.display = isFlagged ? '' : 'none';
+          const nextDisplay = isFlagged ? '' : 'none';
+          if ((item as HTMLElement).style.display !== nextDisplay) {
+            (item as HTMLElement).style.display = nextDisplay;
+          }
         });
-      };
-
-      let scheduled = false;
-      const schedule = () => {
-        if (scheduled) return;
-        scheduled = true;
-        requestAnimationFrame(() => {
-          scheduled = false;
-          applyFollowUpFilter();
-        });
-      };
-
-      applyFollowUpFilter();
-      const mo = new MutationObserver(schedule);
-      mo.observe(document.documentElement, { childList: true, subtree: true });
-      return () => {
-        mo.disconnect();
-        document.querySelectorAll('mws-conversation-list-item').forEach(el => {
-          (el as HTMLElement).style.display = '';
-        });
-      };
-    } else if (activeTabId === 'all') {
-      style.textContent = '';
-      // Ensure all inline hidden styles are cleared
-      document.querySelectorAll('mws-conversation-list-item').forEach(el => {
-        (el as HTMLElement).style.display = '';
-      });
-    } else {
-      // Custom Smart Tab filtering using compiled regex
-      const currentTab = tabs.find(t => t.id === activeTabId);
-      const regexes = currentTab ? compileRulesToRegex(currentTab.rules) : [];
-
-      style.textContent = ''; // Clear global style
-
-      const applyItemFilter = () => {
-        const items = document.querySelectorAll('mws-conversation-list-item');
+      } else if (activeTabId !== 'all' && activeTabId !== 'unread') {
         items.forEach(item => {
           const name = item.querySelector('[data-e2e-conversation-name]')?.textContent || '';
           const snippet = item.querySelector('[data-e2e-conversation-snippet]')?.textContent || '';
           const textToTest = `${name} ${snippet}`;
 
-          let matches = false;
-          if (regexes.length === 0) {
-            matches = true;
-          } else {
-            matches = regexes.some(r => r.test(textToTest));
+          const matches = regexes.length === 0 ? true : regexes.some(r => r.test(textToTest));
+          const nextDisplay = matches ? '' : 'none';
+          if ((item as HTMLElement).style.display !== nextDisplay) {
+            (item as HTMLElement).style.display = nextDisplay;
           }
-
-          (item as HTMLElement).style.display = matches ? '' : 'none';
         });
-      };
-
-      let filterScheduled = false;
-      const scheduleFilter = () => {
-        if (filterScheduled) return;
-        filterScheduled = true;
-        requestAnimationFrame(() => {
-          filterScheduled = false;
-          applyItemFilter();
-        });
-      };
-
-      applyItemFilter();
-      const mo = new MutationObserver(scheduleFilter);
-      mo.observe(document.documentElement, { childList: true, subtree: true });
-      return () => {
-        mo.disconnect();
-        document.querySelectorAll('mws-conversation-list-item').forEach(el => {
-          (el as HTMLElement).style.display = '';
-        });
-      };
-    }
+      }
+    });
 
     return () => {
+      unwatch();
       if (style) style.textContent = '';
-      document.querySelectorAll('mws-conversation-list-item').forEach(el => {
-        (el as HTMLElement).style.display = '';
-      });
+      clearInlineDisplay();
     };
   }, [activeTabId, tabs, followUps]);
 

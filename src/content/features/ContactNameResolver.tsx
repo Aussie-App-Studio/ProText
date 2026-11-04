@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { Slot } from '../Slot';
+import { useActiveConversationId, watchSidebar } from '../engine';
 import { SEL } from '../selectors';
 import {
   getAllStoredContacts,
@@ -64,38 +65,6 @@ export function openGoogleContactsPrefill(name: string, phone: string, email?: s
   window.open(`https://contacts.google.com/new?${params.toString()}`, '_blank');
 }
 
-function useActiveConversationId(): string | null {
-  const [id, setId] = useState<string | null>(() => {
-    const m = location.pathname.match(/\/conversations\/([^/?#]+)/);
-    return m ? m[1] : null;
-  });
-
-  useEffect(() => {
-    let scheduled = false;
-    const update = () => {
-      scheduled = false;
-      const m = location.pathname.match(/\/conversations\/([^/?#]+)/);
-      const next = m ? m[1] : null;
-      setId(prev => (prev === next ? prev : next));
-    };
-    update();
-    const schedule = () => {
-      if (scheduled) return;
-      scheduled = true;
-      requestAnimationFrame(update);
-    };
-    const mo = new MutationObserver(schedule);
-    mo.observe(document.documentElement, { childList: true, subtree: true });
-    window.addEventListener('popstate', update);
-    return () => {
-      mo.disconnect();
-      window.removeEventListener('popstate', update);
-    };
-  }, []);
-
-  return id;
-}
-
 /** Header Name Editor and Google Contacts shortcut */
 export function HeaderNameEditor() {
   const convId = useActiveConversationId();
@@ -144,7 +113,8 @@ export function HeaderNameEditor() {
   useEffect(() => {
     if (!isOpen) return;
     const onMouseDown = (e: MouseEvent) => {
-      if (popoverRef.current && !popoverRef.current.contains(e.target as Node)) {
+      const path = e.composedPath ? e.composedPath() : [];
+      if (popoverRef.current && !path.includes(popoverRef.current) && !popoverRef.current.contains(e.target as Node)) {
         setIsOpen(false);
       }
     };
@@ -206,7 +176,10 @@ export function HeaderNameEditor() {
 
       {/* Inline Name Editor Popover */}
       {isOpen && (
-        <div className="absolute top-7 left-0 z-[2147483645] w-72 rounded-xl border border-gray-700/80 bg-[#1e2025] p-3 shadow-2xl backdrop-blur-md text-xs text-gray-200">
+        <div
+          onMouseDown={e => e.stopPropagation()}
+          className="absolute top-7 left-0 z-[2147483645] w-72 rounded-xl border border-white/15 bg-[#1e2025] p-3 shadow-[0_12px_36px_rgba(0,0,0,0.7)] ring-1 ring-white/10 backdrop-blur-md text-xs text-gray-200"
+        >
           <div className="flex items-center justify-between border-b border-gray-800 pb-2 mb-2.5">
             <span className="font-semibold text-white flex items-center gap-1 text-xs">
               <span>👤</span>
@@ -290,8 +263,10 @@ function SidebarNameResolver() {
   const { lookup, contacts } = useContactsDirectory();
 
   useEffect(() => {
-    const resolveNames = () => {
-      const items = document.querySelectorAll('mws-conversation-list-item');
+    const hasContacts = Object.keys(contacts).length > 0;
+
+    const unwatch = watchSidebar((sidebar, items) => {
+      if (!hasContacts && !sidebar.querySelector('[data-mp-original-phone]')) return;
       items.forEach(item => {
         const nameSpan = item.querySelector<HTMLElement>('[data-e2e-conversation-name]');
         if (!nameSpan) return;
@@ -321,7 +296,9 @@ function SidebarNameResolver() {
                 'display: block; font-size: 10px; color: #9ca3af; font-family: monospace; font-weight: normal; line-height: 1.2;';
               nameSpan.after(subPhone);
             }
-            subPhone.textContent = textToCheck;
+            if (subPhone.textContent !== textToCheck) {
+              subPhone.textContent = textToCheck;
+            }
           } else if (originalPhone) {
             // Revert if removed
             nameSpan.textContent = originalPhone;
@@ -330,26 +307,10 @@ function SidebarNameResolver() {
           }
         }
       });
-    };
-
-    let scheduled = false;
-    const scheduleResolve = () => {
-      if (scheduled) return;
-      scheduled = true;
-      requestAnimationFrame(() => {
-        scheduled = false;
-        resolveNames();
-      });
-    };
-
-    resolveNames();
-
-    const mo = new MutationObserver(scheduleResolve);
-    const sidebar = document.querySelector(SEL.conversationsList) || document.documentElement;
-    mo.observe(sidebar, { childList: true, subtree: true });
+    });
 
     return () => {
-      mo.disconnect();
+      unwatch();
       document.querySelectorAll('[data-mp-original-phone]').forEach(el => {
         const orig = el.getAttribute('data-mp-original-phone');
         if (orig) el.textContent = orig;

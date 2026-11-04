@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "ProText for Google Messages™: Themes, Folders & Undo",
   "short_name": "ProText",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Themes, smart folder tabs, undo send, schedule send, contact CRM notes, and power tools for Google Messages for Web.",
   "permissions": ["storage", "alarms", "notifications"],
   "icons": {

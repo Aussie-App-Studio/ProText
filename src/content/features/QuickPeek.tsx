@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { useAnchor } from '../engine';
 import { SEL } from '../selectors';
 import { getThreadHistory, saveThreadHistory, type CachedMessage, type CachedThread } from '../db';
 import { useFeature } from '../settings/store';
@@ -14,19 +15,29 @@ interface PeekTarget {
 }
 
 /** Automatically caches messages from the currently open conversation into local IndexedDB. */
-function useThreadRecorder() {
+function useThreadRecorder(enabled: boolean) {
+  const messagesList = useAnchor(SEL.messagesList);
+
   useEffect(() => {
+    if (!enabled || !messagesList) return;
+
+    let lastSavedSig = '';
+    let debounceTimer: number | null = null;
+
     const record = () => {
+      debounceTimer = null;
       const match = location.pathname.match(/\/conversations\/([^/?#]+)/);
       if (!match) return;
       const conversationId = match[1];
-      const headerTitle = document.querySelector(SEL.headerTitle)?.textContent?.trim() || '';
 
-      const wrappers = Array.from(document.querySelectorAll('mws-message-wrapper'));
-      if (!wrappers.length) return;
+      const allWrappers = messagesList.querySelectorAll('mws-message-wrapper');
+      if (!allWrappers.length) return;
 
+      // Only inspect the last 20 wrappers since saveThreadHistory only stores the last 20 messages
+      const startIdx = Math.max(0, allWrappers.length - 20);
       const messages: CachedMessage[] = [];
-      for (const w of wrappers) {
+      for (let i = startIdx; i < allWrappers.length; i++) {
+        const w = allWrappers[i];
         const core = w.querySelector('[data-e2e-message-wrapper-core]');
         const textEl = w.querySelector('[data-e2e-text-message-content]');
         const id = core?.getAttribute('data-e2e-message-id');
@@ -38,31 +49,36 @@ function useThreadRecorder() {
       }
 
       if (messages.length > 0) {
-        saveThreadHistory(conversationId, headerTitle, messages);
+        const lastMsg = messages[messages.length - 1];
+        const headerTitle = document.querySelector(SEL.headerTitle)?.textContent?.trim() || '';
+        const sig = `${conversationId}:${headerTitle}:${messages.length}:${lastMsg.id}:${lastMsg.text}`;
+        if (sig === lastSavedSig) return;
+        lastSavedSig = sig;
+        void saveThreadHistory(conversationId, headerTitle, messages);
       }
     };
 
-    let scheduled = false;
     const scheduleRecord = () => {
-      if (scheduled) return;
-      scheduled = true;
-      requestAnimationFrame(() => {
-        scheduled = false;
-        record();
-      });
+      if (debounceTimer !== null) return;
+      debounceTimer = window.setTimeout(record, 500);
     };
 
+    // Initial capture when message list mounts
     record();
+
     const mo = new MutationObserver(scheduleRecord);
-    mo.observe(document.documentElement, { childList: true, subtree: true });
-    return () => mo.disconnect();
-  }, []);
+    mo.observe(messagesList, { childList: true, subtree: true });
+    return () => {
+      if (debounceTimer !== null) window.clearTimeout(debounceTimer);
+      mo.disconnect();
+    };
+  }, [enabled, messagesList]);
 }
 
 export function QuickPeek() {
   const enabled = useFeature('quickPeek');
   const palette = useThemePalette();
-  useThreadRecorder();
+  useThreadRecorder(enabled);
 
   const [target, setTarget] = useState<PeekTarget | null>(null);
   const [thread, setThread] = useState<CachedThread | null>(null);

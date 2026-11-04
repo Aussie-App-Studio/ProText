@@ -1,42 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
 import { Slot } from '../Slot';
+import { useActiveConversationId } from '../engine';
 import { SEL } from '../selectors';
 import { getNote, saveNote } from '../db';
 import { useFeature } from '../settings/store';
 import { NotesIcon, CheckIcon } from '../ui/MaterialIcons';
 import { useThemeMode } from './ThemeEngine';
 
-export function useActiveConversationId(): string | null {
-  const [id, setId] = useState<string | null>(() => {
-    const m = location.pathname.match(/\/conversations\/([^/?#]+)/);
-    return m ? m[1] : null;
-  });
-
-  useEffect(() => {
-    let scheduled = false;
-    const update = () => {
-      scheduled = false;
-      const m = location.pathname.match(/\/conversations\/([^/?#]+)/);
-      const next = m ? m[1] : null;
-      setId(prev => (prev === next ? prev : next));
-    };
-    update();
-    const schedule = () => {
-      if (scheduled) return;
-      scheduled = true;
-      requestAnimationFrame(update);
-    };
-    const mo = new MutationObserver(schedule);
-    mo.observe(document.documentElement, { childList: true, subtree: true });
-    window.addEventListener('popstate', update);
-    return () => {
-      mo.disconnect();
-      window.removeEventListener('popstate', update);
-    };
-  }, []);
-
-  return id;
-}
+export { useActiveConversationId };
 
 // Reactive note cache and sync
 const noteListeners = new Set<() => void>();
@@ -111,7 +82,8 @@ export function HeaderNotesButton() {
   useEffect(() => {
     if (!popoverOpen) return;
     const onMouseDown = (e: MouseEvent) => {
-      if (popoverRef.current && !popoverRef.current.contains(e.target as Node)) {
+      const path = e.composedPath ? e.composedPath() : [];
+      if (popoverRef.current && !path.includes(popoverRef.current) && !popoverRef.current.contains(e.target as Node)) {
         setPopoverOpen(false);
       }
     };
@@ -132,7 +104,9 @@ export function HeaderNotesButton() {
     }, 350);
   };
 
-  const handleClear = async () => {
+  const handleClear = async (e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    if (saveTimer.current) window.clearTimeout(saveTimer.current);
     setLocalText('');
     await update('');
     setSaveStatus('');
@@ -169,10 +143,11 @@ export function HeaderNotesButton() {
       {/* Popover Note Editor */}
       {popoverOpen && (
         <div
-          className={`absolute top-8 right-0 z-[2147483645] w-80 rounded-xl border p-3.5 shadow-2xl backdrop-blur-md text-xs font-sans animate-in fade-in zoom-in-95 duration-100 ${
+          onMouseDown={e => e.stopPropagation()}
+          className={`absolute top-8 right-0 z-[2147483645] w-80 rounded-xl border p-3.5 backdrop-blur-md text-xs font-sans animate-in fade-in zoom-in-95 duration-100 ${
             isLight
-              ? 'border-[#dadce0] bg-white text-gray-900 shadow-xl'
-              : 'border-gray-700/80 bg-[#1e2025] text-gray-200'
+              ? 'border-[#dadce0] bg-white text-gray-900 shadow-[0_12px_36px_rgba(0,0,0,0.18)]'
+              : 'border-white/15 bg-[#1e2025] text-gray-200 shadow-[0_12px_36px_rgba(0,0,0,0.7)] ring-1 ring-white/10'
           }`}
         >
           {/* Popover Header */}
@@ -284,6 +259,7 @@ function InChatNoteCard({
   };
 
   const handleClear = async () => {
+    if (timer.current) window.clearTimeout(timer.current);
     setEditText('');
     await update('');
     setIsEditing(false);

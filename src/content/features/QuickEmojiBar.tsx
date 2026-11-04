@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { Slot } from '../Slot';
+import { useAnchor } from '../engine';
 import { SEL } from '../selectors';
 import { getSetting, setSetting } from '../db';
 import { useFeature } from '../settings/store';
@@ -120,11 +121,11 @@ export function insertIntoComposer(text: string) {
 /** Hook to detect if the user is focused on or typing in Google Messages composer */
 function useComposerActive() {
   const [active, setActive] = useState(false);
+  const ed = useAnchor(SEL.editable) as HTMLElement | null;
 
   useEffect(() => {
     let timer: number | null = null;
     const check = () => {
-      const ed = Array.from(document.querySelectorAll<HTMLElement>(SEL.editable)).find(e => e.offsetParent !== null);
       if (!ed) {
         setActive(false);
         return;
@@ -160,7 +161,7 @@ function useComposerActive() {
       document.removeEventListener('input', onInput);
       window.removeEventListener('popstate', check);
     };
-  }, []);
+  }, [ed]);
 
   return active;
 }

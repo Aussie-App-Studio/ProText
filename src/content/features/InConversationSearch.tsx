@@ -144,73 +144,78 @@ export function InConversationSearchBar() {
     return () => window.removeEventListener('popstate', onLocationChange);
   }, []);
 
-  // Perform search & highlight
+  // Perform search & highlight (debounced by 120ms while typing to avoid full-DOM TreeWalker churn on every keystroke)
   useEffect(() => {
-    clearHighlights();
-
     const q = query.trim().toLowerCase();
     if (!q || !isOpen) {
+      clearHighlights();
       setMatches([]);
       setActiveIndex(0);
       return;
     }
 
-    const messageEls = Array.from(document.querySelectorAll('mws-message-wrapper [data-e2e-text-message-content]'));
-    const foundMarks: HTMLElement[] = [];
+    const timer = window.setTimeout(() => {
+      clearHighlights();
 
-    for (const el of messageEls) {
-      // Walk text nodes
-      const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
-      const textNodes: Text[] = [];
-      let currentNode = walker.nextNode();
-      while (currentNode) {
-        textNodes.push(currentNode as Text);
-        currentNode = walker.nextNode();
-      }
+      const messageEls = Array.from(document.querySelectorAll('mws-message-wrapper [data-e2e-text-message-content]'));
+      const foundMarks: HTMLElement[] = [];
 
-      for (const textNode of textNodes) {
-        const text = textNode.nodeValue || '';
-        const lower = text.toLowerCase();
-        let idx = lower.indexOf(q);
+      for (const el of messageEls) {
+        // Walk text nodes
+        const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+        const textNodes: Text[] = [];
+        let currentNode = walker.nextNode();
+        while (currentNode) {
+          textNodes.push(currentNode as Text);
+          currentNode = walker.nextNode();
+        }
 
-        if (idx !== -1) {
-          const frag = document.createDocumentFragment();
-          let lastIdx = 0;
+        for (const textNode of textNodes) {
+          const text = textNode.nodeValue || '';
+          const lower = text.toLowerCase();
+          let idx = lower.indexOf(q);
 
-          while (idx !== -1) {
-            // Text before match
-            if (idx > lastIdx) {
-              frag.appendChild(document.createTextNode(text.substring(lastIdx, idx)));
+          if (idx !== -1) {
+            const frag = document.createDocumentFragment();
+            let lastIdx = 0;
+
+            while (idx !== -1) {
+              // Text before match
+              if (idx > lastIdx) {
+                frag.appendChild(document.createTextNode(text.substring(lastIdx, idx)));
+              }
+
+              // Matched mark
+              const mark = document.createElement('mark');
+              mark.className = 'mp-search-highlight';
+              mark.textContent = text.substring(idx, idx + q.length);
+              frag.appendChild(mark);
+              foundMarks.push(mark);
+
+              lastIdx = idx + q.length;
+              idx = lower.indexOf(q, lastIdx);
             }
 
-            // Matched mark
-            const mark = document.createElement('mark');
-            mark.className = 'mp-search-highlight';
-            mark.textContent = text.substring(idx, idx + q.length);
-            frag.appendChild(mark);
-            foundMarks.push(mark);
+            // Remaining text
+            if (lastIdx < text.length) {
+              frag.appendChild(document.createTextNode(text.substring(lastIdx)));
+            }
 
-            lastIdx = idx + q.length;
-            idx = lower.indexOf(q, lastIdx);
+            textNode.parentNode?.replaceChild(frag, textNode);
           }
-
-          // Remaining text
-          if (lastIdx < text.length) {
-            frag.appendChild(document.createTextNode(text.substring(lastIdx)));
-          }
-
-          textNode.parentNode?.replaceChild(frag, textNode);
         }
       }
-    }
 
-    setMatches(foundMarks);
-    setActiveIndex(0);
+      setMatches(foundMarks);
+      setActiveIndex(0);
 
-    if (foundMarks.length > 0) {
-      foundMarks[0].classList.add('mp-search-active');
-      foundMarks[0].scrollIntoView({ behavior: 'smooth', block: 'center' });
-    }
+      if (foundMarks.length > 0) {
+        foundMarks[0].classList.add('mp-search-active');
+        foundMarks[0].scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+    }, 120);
+
+    return () => window.clearTimeout(timer);
   }, [query, isOpen]);
 
   const goToNext = () => {
